@@ -14,6 +14,22 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend requests
 
+class VercelFix:
+    def __init__(self, app):
+        self.app = app
+    def __call__(self, environ, start_response):
+        import urllib.parse
+        qs = environ.get('QUERY_STRING', '')
+        params = urllib.parse.parse_qs(qs, keep_blank_values=True)
+        if 'orig' in params:
+            environ['PATH_INFO'] = params['orig'][0]
+            new_params = {k: v for k, v in params.items() if k != 'orig'}
+            environ['QUERY_STRING'] = urllib.parse.urlencode(new_params, doseq=True)
+        return self.app(environ, start_response)
+
+app.wsgi_app = VercelFix(app.wsgi_app)
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def catch_all(path):

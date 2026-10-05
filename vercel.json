@@ -1,17 +1,30 @@
 {
-  "functions": {
-    "api/**/*.py": {
-      "includeFiles": "*{.html,.js,.css,.jpg}"
+  "builds": [
+    {
+      "src": "backend/app.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "*.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.js",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.css",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.jpg",
+      "use": "@vercel/static"
     }
-  },
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.py?original_path=/api/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.py?original_path=/$1"
+      "destination": "/backend/app.py?orig=/api/$1"
     }
   ]
 }
