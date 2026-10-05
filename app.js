@@ -643,53 +643,53 @@ function getDashboardView() {
                 <div><div class="font-black text-base md:text-xl tracking-wide">IGYR</div><div class="text-[10px] md:text-xs text-gray-400 leading-tight">Institute Portal</div></div>
             </div>
             
-            <nav class="flex-1 p-2 md:p-4 flex flex-row md:flex-col gap-2 md:space-y-2 overflow-x-auto md:overflow-y-auto items-center md:items-stretch">
-                <button data-tab="profile" class="sidebar-tab-btn w-auto md:w-full whitespace-nowrap text-left px-4 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center flex-shrink-0 text-sm md:text-base ${
+            <nav class="flex-1 p-2 md:p-4 flex flex-row md:flex-col gap-1 md:gap-2 md:space-y-2 overflow-x-auto md:overflow-y-auto items-center md:items-stretch">
+                <button data-tab="profile" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'profile' 
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40 translate-x-1 scale-105' 
-                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white hover:translate-x-1'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
+                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-user mr-3 w-5 text-center"></i> Profile
+                    <i class="fa-solid fa-user w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Profile</span>
                 </button>
-                <button data-tab="order_status" class="sidebar-tab-btn w-auto md:w-full whitespace-nowrap text-left px-4 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center flex-shrink-0 text-sm md:text-base ${
+                <button data-tab="order_status" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'order_status' 
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40 translate-x-1 scale-105' 
-                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white hover:translate-x-1'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
+                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-list-check mr-3 w-5 text-center"></i> Order Status
+                    <i class="fa-solid fa-list-check w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Order Status</span>
                 </button>
-                <button data-tab="pricing" class="sidebar-tab-btn w-auto md:w-full whitespace-nowrap text-left px-4 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center flex-shrink-0 text-sm md:text-base ${
+                <button data-tab="pricing" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'pricing' 
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40 translate-x-1 scale-105' 
-                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white hover:translate-x-1'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
+                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-tags mr-3 w-5 text-center"></i> Pricing Config
+                    <i class="fa-solid fa-tags w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Pricing Config</span>
                 </button>
-                <button data-tab="payment" class="sidebar-tab-btn w-auto md:w-full whitespace-nowrap text-left px-4 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center flex-shrink-0 text-sm md:text-base ${
+                <button data-tab="payment" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'payment' 
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40 translate-x-1 scale-105' 
-                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white hover:translate-x-1'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
+                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-wallet mr-3 w-5 text-center"></i> Payment Tracking
+                    <i class="fa-solid fa-wallet w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Payment Tracking</span>
                 </button>
-                <button data-tab="history" class="sidebar-tab-btn w-auto md:w-full whitespace-nowrap text-left px-4 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center flex-shrink-0 text-sm md:text-base ${
+                <button data-tab="history" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'history' 
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40 translate-x-1 scale-105' 
-                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white hover:translate-x-1'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
+                    : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-clock-rotate-left mr-3 w-5 text-center"></i> Result History
+                    <i class="fa-solid fa-clock-rotate-left w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Result History</span>
                 </button>
             </nav>
             
-            <div class="p-4 border-t border-gray-800 mt-auto">
-                <button id="btn-logout" class="w-full flex items-center justify-center bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white transition-colors py-3 rounded-lg font-bold">
-                    <i class="fa-solid fa-power-off mr-2"></i> Logout
+            <div class="p-2 md:p-4 border-t border-gray-800 mt-auto flex-shrink-0">
+                <button id="btn-logout" class="w-full flex items-center justify-center bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white transition-colors py-2 md:py-3 rounded-lg font-bold">
+                    <i class="fa-solid fa-power-off md:mr-2"></i> <span class="hidden md:inline">Logout</span>
                 </button>
             </div>
         </aside>
         
         <!-- Main Content -->
-        <main class="flex-1 overflow-y-auto bg-gray-50 p-8 h-full">
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8 h-full">
             <div class="max-w-4xl mx-auto space-y-6 pb-20">
                 ${state.activeTab === 'profile' ? `
                     <div class="text-center mb-8 pt-8">
@@ -824,7 +824,7 @@ function getNextStepsView() {
             </div>
             
             <form id="next-steps-form" class="space-y-8">
-                <div class="grid md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Total Students</label>
                         <input required type="number" min="1" id="res-students" value="${state.resultDetails.totalStudents}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-colors" />
@@ -841,7 +841,7 @@ function getNextStepsView() {
 
                 <div>
                     <label class="block text-lg font-bold text-gray-800 mb-4">Select Output Format</label>
-                    <div class="grid md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <label class="relative flex flex-col p-6 border-2 rounded-2xl cursor-pointer transition-all ${state.resultDetails.option === 'normal' ? 'border-primary bg-blue-50/50 shadow-md' : 'border-gray-100 hover:border-gray-300'}">
                             <input type="radio" name="formatOption" value="normal" ${state.resultDetails.option === 'normal' ? 'checked' : ''} class="absolute right-4 top-4 w-5 h-5 accent-primary" />
                             <i class="fa-solid fa-table text-3xl mb-4 ${state.resultDetails.option === 'normal' ? 'text-primary' : 'text-gray-400'}"></i>
