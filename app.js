@@ -635,10 +635,10 @@ function getDashboardView() {
     `;
 
     return `
-    <div class="min-h-screen bg-gray-50 flex fade-in h-screen overflow-hidden">
+    <div class="bg-gray-50 flex flex-col md:flex-row fade-in h-screen overflow-hidden">
         <!-- Sidebar -->
-        <aside class="w-full md:w-64 bg-gray-900 text-white flex flex-row md:flex-col shadow-xl flex-shrink-0 md:h-full overflow-x-auto md:overflow-visible z-50">
-            <div class="p-4 md:p-6 flex flex-row md:flex-col items-center border-r md:border-r-0 md:border-b border-gray-800 flex-shrink-0">
+        <aside class="w-full md:w-64 bg-gray-900 text-white flex flex-row md:flex-col shadow-xl flex-shrink-0 md:h-full z-50 border-b md:border-b-0 border-gray-800">
+            <div class="p-3 md:p-6 flex flex-row md:flex-col items-center border-r md:border-r-0 md:border-b border-gray-800 flex-shrink-0">
                 <img src="logo.jpg" alt="Logo" class="w-10 h-10 md:w-16 md:h-16 rounded-full border-2 md:border-4 border-gray-800 mr-3 md:mr-0 md:mb-3 shadow-lg" />
                 <div><div class="font-black text-base md:text-xl tracking-wide">IGYR</div><div class="text-[10px] md:text-xs text-gray-400 leading-tight">Institute Portal</div></div>
             </div>
@@ -689,7 +689,7 @@ function getDashboardView() {
         </aside>
         
         <!-- Main Content -->
-        <main class="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8 h-full">
+        <main class="flex-1 min-h-0 overflow-y-auto bg-gray-50 p-4 md:p-8">
             <div class="max-w-4xl mx-auto space-y-6 pb-20">
                 ${state.activeTab === 'profile' ? `
                     <div class="text-center mb-8 pt-8">
