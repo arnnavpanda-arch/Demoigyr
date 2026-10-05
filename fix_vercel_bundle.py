@@ -1,4 +1,6 @@
-{
+import json
+
+vercel = {
   "functions": {
     "api/**/*.py": {
       "includeFiles": "*{.html,.js,.css,.jpg}"
@@ -15,3 +17,7 @@
     }
   ]
 }
+
+with open('vercel.json', 'w') as f:
+    json.dump(vercel, f, indent=2)
+

@@ -14,6 +14,26 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend requests
 
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    import os
+    from flask import send_from_directory, send_file
+    
+    base = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(base)
+    
+    if path == '' or path == '/':
+        path = 'index.html'
+        
+    req_path = os.path.join(root_dir, path)
+    if os.path.exists(req_path):
+        return send_from_directory(root_dir, path)
+        
+    files = os.listdir(root_dir) if os.path.exists(root_dir) else []
+    return f"<h1>File Not Found</h1><p>Tried to load: {path}</p><p>Files available in Lambda: {files}</p>", 404
+
+
 
 
 
