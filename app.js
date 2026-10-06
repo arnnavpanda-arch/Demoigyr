@@ -95,6 +95,15 @@ async function navigate(viewName) {
         } catch(e) {
             state.appStatus = 'pending';
         }
+        
+        if (state.appStatus === 'pending') {
+            viewName = 'pending';
+        } else if (state.appStatus === 'rejected') {
+            viewName = 'profileSetup';
+        } else if (state.appStatus === 'missing') {
+            viewName = 'auth';
+            localStorage.removeItem('igyr_session_email');
+        }
     }
     
     state.view = viewName;
@@ -189,6 +198,8 @@ function getAuthView() {
 }
 
 function getVerifyView() {
+    const isRegistering = state.authMode === 'register' || state.isNewUser;
+    
     return `
     <div class="flex items-center justify-center min-h-screen p-4 bg-gray-50">
         <div class="bg-white p-8 rounded-3xl w-full max-w-md fade-in text-center shadow-2xl border border-gray-100">
@@ -196,7 +207,17 @@ function getVerifyView() {
                 <i class="fa-solid fa-shield-halved text-4xl text-primary"></i>
             </div>
             <h2 class="text-2xl font-bold text-gray-800 mb-2">Verification Required</h2>
-            <p class="text-gray-600 mb-8 text-sm">We've sent a 4-digit code to <br/><strong class="text-gray-800">${state.email}</strong></p>
+            <p class="text-gray-600 mb-4 text-sm">We've sent a 4-digit code to <br/><strong class="text-gray-800">${state.email}</strong></p>
+            
+            ${isRegistering ? `
+            <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded text-left mb-6 shadow-sm">
+                <p class="font-bold text-red-700 text-sm mb-1"><i class="fa-solid fa-circle-exclamation mr-1"></i> Important Notice</p>
+                <p class="text-xs text-red-600 leading-relaxed">
+                    After your registration is submitted, if the confirmation email is not showing in your mail inbox, please check the <strong>Gmail Spam section</strong> and <strong>Report Not Spam</strong>. The email will then safely show in your primary inbox.
+                </p>
+            </div>
+            ` : ''}
+            
             ${getErrorHTML()}
             <form id="verify-form" class="space-y-6">
                 <input type="text" id="verify-code" required
@@ -262,13 +283,23 @@ function getPolicyView() {
 }
 
 function getProfileSetupView() {
+    const isRejected = state.appStatus === 'rejected';
+    const d = state.instituteData || {};
+    
     return `
     <div class="min-h-screen bg-gray-50 py-10 px-4 fade-in">
         <div class="max-w-3xl mx-auto bg-white rounded-3xl shadow-xl border border-gray-100 p-8">
             <div class="text-center mb-8 border-b pb-6">
+                ${isRejected ? `
+                <div class="bg-red-50 border border-red-200 p-4 rounded-xl mb-6">
+                    <p class="font-bold text-red-700 text-lg mb-1"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Registration Rejected</p>
+                    <p class="text-sm text-red-600">Your previous application was rejected by the admin. Please correct your details below and reapply.</p>
+                </div>
+                ` : `
                 <span class="text-xs font-bold uppercase tracking-widest text-primary bg-blue-50 px-3 py-1 rounded-full mb-3 inline-block">Step 2 of 2</span>
                 <h2 class="text-3xl font-bold text-gray-800">Complete Institution Profile</h2>
                 <p class="text-gray-500 mt-2">We need these details to verify your account before you can publish results.</p>
+                `}
             </div>
             
             ${getErrorHTML()}
@@ -279,35 +310,35 @@ function getProfileSetupView() {
                         <label class="block text-sm font-semibold text-gray-700 mb-1">Type of Institute</label>
                         <select required id="inst-type" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all">
                             <option value="">Select Type</option>
-                            <option value="School">School</option>
-                            <option value="College">College</option>
-                            <option value="University">University</option>
-                            <option value="Coaching">Coaching Center</option>
+                            <option value="School" ${d.type === 'School' ? 'selected' : ''}>School</option>
+                            <option value="College" ${d.type === 'College' ? 'selected' : ''}>College</option>
+                            <option value="University" ${d.type === 'University' ? 'selected' : ''}>University</option>
+                            <option value="Coaching" ${d.type === 'Coaching' ? 'selected' : ''}>Coaching Center</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1">Mobile Number</label>
-                        <input required type="tel" id="inst-mobile" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all" />
+                        <input required type="tel" id="inst-mobile" value="${d.mobile || ''}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all" />
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1">State (All India)</label>
-                        <select required id="inst-state" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all bg-white">
+                        <select required id="inst-state" data-selected="${d.state || ''}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all bg-white">
                             <option value="" disabled selected>Select State</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1">District</label>
-                        <select required id="inst-district" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all bg-white" disabled>
+                        <select required id="inst-district" data-selected="${d.district || ''}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all bg-white" disabled>
                             <option value="" disabled selected>Select District</option>
                         </select>
                     </div>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Full Address</label>
-                    <textarea required id="inst-address" rows="3" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all"></textarea>
+                    <textarea required id="inst-address" rows="3" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all resize-none">${d.address || ''}</textarea>
                 </div>
-                <button type="submit" class="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition-colors shadow-lg">
-                    Submit Details for Approval <i class="fa-solid fa-paper-plane ml-2"></i>
+                <button type="submit" class="w-full bg-gradient-to-r from-primary to-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-primary/40 transform hover:-translate-y-1 transition-all mt-6 text-lg">
+                    ${isRejected ? 'Submit & Reapply <i class="fa-solid fa-rotate-right ml-2"></i>' : 'Submit Details & Request Approval <i class="fa-solid fa-paper-plane ml-2"></i>'}
                 </button>
             </form>
         </div>
@@ -331,10 +362,14 @@ function getPendingView() {
             <div class="bg-gray-100 p-4 rounded-xl mb-6 text-sm flex items-start text-left">
                 <i class="fa-solid fa-envelope-circle-check mt-1 mr-3 text-primary text-lg"></i>
                 <div>
-                    <strong class="block text-gray-800 mb-1">Confirmation Sent</strong>
-                    An email has been sent to your registered address regarding this review process.
+                    <strong class="block text-gray-800 mb-1">What's Next?</strong>
+                    Once approved, you will receive an email. You can then sign in using your registered email and a verification code.
                 </div>
             </div>
+            
+            <button onclick="localStorage.removeItem('igyr_session_email'); state.email=''; navigate('auth');" class="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center">
+                Return to Login Page <i class="fa-solid fa-arrow-right-to-bracket ml-2"></i>
+            </button>
             
         </div>
     </div>`;
@@ -408,7 +443,11 @@ function getDashboardView() {
         if(status === 'rejected') return '<span class="text-red-600 font-bold"><i class="fa-solid fa-xmark"></i> Registration Rejected:</span> Please contact support.';
         if(status === 'order_rejected') return '<span class="text-red-600 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> Order Rejected:</span> Your requested output format was rejected by the admin.';
         if(status === 'removed') return '<span class="text-red-600 font-bold"><i class="fa-solid fa-ban"></i> Account Revoked:</span> Institution removed from hub.';
-        if(status === 'approved') return '<span class="text-green-600 font-bold"><i class="fa-solid fa-check"></i> Account Verified:</span> You have no ongoing publications. Click "Publish New Results" to start.';
+        if(status === 'approved') {
+            const hasDues = ((state.payments?.phases || []).reduce((a, p) => a + (p.debited || 0), 0) - (state.payments?.phases || []).reduce((a, p) => a + (p.credited || 0), 0)) > 0;
+            if(hasDues) return '<span class="text-red-600 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> Action Required:</span> You have pending dues. Please clear them to unlock new result publications.';
+            return '<span class="text-green-600 font-bold"><i class="fa-solid fa-check"></i> Account Verified:</span> You have no ongoing publications. Click "Publish New Result" to start.';
+        }
         if(status === 'order_placed') return '<span class="text-blue-600 font-bold"><i class="fa-solid fa-clock"></i> Order Placed:</span> Awaiting admin approval of your requested format.';
         if(status === 'documents_required') return '<span class="text-purple-600 font-bold"><i class="fa-solid fa-file-arrow-up"></i> Documents Required:</span> Admin approved format. Please upload required files below.';
         if(status === 'processing') return '<span class="text-blue-600 font-bold"><i class="fa-solid fa-gear fa-spin"></i> Processing:</span> Admin is currently processing your data.';
@@ -458,7 +497,9 @@ function getDashboardView() {
     
     let paymentTrackerHtml = '';
     const activeOrderStates = ['order_placed', 'documents_required', 'processing', 'verification_pending', 'ready_to_publish', 'published'];
-    if (activeOrderStates.includes(appStatus) || (state.payments && state.payments.phases && state.payments.phases.length > 0)) {
+    const historyPayments = (state.history || []).filter(h => h.payments && h.payments.phases && h.payments.phases.length > 0).reverse();
+    
+    if (activeOrderStates.includes(appStatus) || (state.payments && state.payments.phases && state.payments.phases.length > 0) || historyPayments.length > 0) {
         const payments = state.payments || {phases: []};
         const totalBilled = (payments.phases || []).reduce((acc, p) => acc + (p.debited || 0), 0);
         const totalPaid = (payments.phases || []).reduce((acc, p) => acc + (p.credited || 0), 0);
@@ -542,7 +583,58 @@ function getDashboardView() {
                     ` : ''}
                 ` : ''}
                 
-                ${totalBilled === 0 ? '<div class="text-center p-4 bg-gray-50 rounded border border-dashed"><p class="text-sm text-gray-500 italic">No active payment request yet.</p></div>' : ''}
+                ${totalBilled === 0 && (state.payments?.phases || []).length === 0 ? '<div class="text-center p-4 bg-gray-50 rounded border border-dashed"><p class="text-sm text-gray-500 italic">No active payment request for the current order.</p></div>' : ''}
+                
+                ${historyPayments.length > 0 ? `
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Previous Order Payments</h4>
+                    <div class="flex flex-col gap-3 max-h-64 overflow-y-auto">
+                        ${historyPayments.map((hist, i) => {
+                            const hTotalBilled = (hist.payments.phases || []).reduce((acc, p) => acc + (p.debited || 0), 0);
+                            const hTotalPaid = (hist.payments.phases || []).reduce((acc, p) => acc + (p.credited || 0), 0);
+                            const hPercent = hTotalBilled > 0 ? Math.min(100, Math.round((hTotalPaid / hTotalBilled) * 100)) : 0;
+                            const isSettled = hTotalPaid >= hTotalBilled && hTotalBilled > 0;
+                            return `
+                            <div class="bg-gray-50 border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="font-bold text-gray-800 text-sm"><i class="fa-regular fa-calendar-check mr-1 text-gray-500"></i> Order Closed: ${new Date(hist.date).toLocaleDateString()}</span>
+                                    <span class="text-[10px] font-bold px-2 py-1 ${isSettled ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} rounded-full shadow-sm"><i class="fa-solid ${isSettled ? 'fa-check' : 'fa-triangle-exclamation'} mr-1"></i> ${isSettled ? 'Settled' : 'Unpaid Balance'}</span>
+                                </div>
+                                <div class="flex justify-between items-end mb-3">
+                                    <div class="text-xs">
+                                        <p class="text-gray-500 uppercase font-bold tracking-wide">Total Paid</p>
+                                        <p class="text-xl font-black text-green-600">₹${hTotalPaid}</p>
+                                    </div>
+                                    <div class="text-xs text-right">
+                                        <p class="text-gray-500 uppercase font-bold tracking-wide">Total Billed</p>
+                                        <p class="text-lg font-bold text-gray-700">₹${hTotalBilled}</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="relative w-full bg-gray-200 rounded-full h-1.5 shadow-inner mb-3">
+                                    <div class="absolute top-0 left-0 h-1.5 ${isSettled ? 'bg-green-500' : 'bg-red-500'} rounded-full" style="width: ${hPercent}%"></div>
+                                </div>
+                                
+                                <details class="text-xs">
+                                    <summary class="cursor-pointer text-blue-600 font-bold hover:text-blue-800 select-none bg-white border inline-block px-3 py-1.5 rounded-md shadow-sm"><i class="fa-solid fa-list mr-1"></i> View Transaction Ledger</summary>
+                                    <div class="mt-2 flex flex-col gap-1 border border-gray-100 bg-white p-3 rounded-lg shadow-inner">
+                                        ${(hist.payments.phases || []).map(p => `
+                                            <div class="flex justify-between items-center border-b border-gray-100 pb-1.5 last:border-0 last:pb-0">
+                                                <span class="text-gray-600 font-medium">${p.name}</span>
+                                                <div class="text-right">
+                                                    <span class="font-bold text-green-600">₹${p.credited}</span>
+                                                    <span class="text-gray-400 text-[10px] mx-1">/</span>
+                                                    <span class="font-bold text-red-600">₹${p.debited}</span>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </details>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+                ` : ''}
                 
                 
             </div>
@@ -649,41 +741,41 @@ function getDashboardView() {
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
                     : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-user w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Profile</span>
+                    <i class="fa-solid fa-user w-5 text-center text-lg md:mr-3"></i> <span class="ml-2 md:ml-0 whitespace-nowrap">Profile</span>
                 </button>
                 <button data-tab="order_status" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'order_status' 
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
                     : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-list-check w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Order Status</span>
+                    <i class="fa-solid fa-list-check w-5 text-center text-lg md:mr-3"></i> <span class="ml-2 md:ml-0 whitespace-nowrap">Order Status</span>
                 </button>
                 <button data-tab="pricing" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'pricing' 
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
                     : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-tags w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Pricing Config</span>
+                    <i class="fa-solid fa-tags w-5 text-center text-lg md:mr-3"></i> <span class="ml-2 md:ml-0 whitespace-nowrap">Pricing Config</span>
                 </button>
                 <button data-tab="payment" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'payment' 
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
                     : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-wallet w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Payment Tracking</span>
+                    <i class="fa-solid fa-wallet w-5 text-center text-lg md:mr-3"></i> <span class="ml-2 md:ml-0 whitespace-nowrap">Payment Tracking</span>
                 </button>
                 <button data-tab="history" class="sidebar-tab-btn flex-shrink-0 md:w-full text-left px-3 md:px-5 py-2 md:py-3.5 rounded-xl transition-all duration-300 flex items-center text-sm md:text-base ${
                     state.activeTab === 'history' 
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-lg shadow-blue-900/40' 
                     : 'text-gray-400 font-medium hover:bg-gray-800 hover:text-white'
                 }">
-                    <i class="fa-solid fa-clock-rotate-left w-5 text-center text-lg md:mr-3"></i> <span class="hidden md:inline">Result History</span>
+                    <i class="fa-solid fa-clock-rotate-left w-5 text-center text-lg md:mr-3"></i> <span class="ml-2 md:ml-0 whitespace-nowrap">Result History</span>
                 </button>
             </nav>
             
             <div class="p-2 md:p-4 border-t border-gray-800 mt-auto flex-shrink-0">
                 <button id="btn-logout" class="w-full flex items-center justify-center bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white transition-colors py-2 md:py-3 rounded-lg font-bold">
-                    <i class="fa-solid fa-power-off md:mr-2"></i> <span class="hidden md:inline">Logout</span>
+                    <i class="fa-solid fa-power-off md:mr-2"></i> <span class="ml-2 md:ml-0 whitespace-nowrap">Logout</span>
                 </button>
             </div>
         </aside>
@@ -734,11 +826,17 @@ function getDashboardView() {
                                     <h2 class="text-2xl font-black text-gray-800">Order Status Tracker</h2>
                                     <p class="text-sm text-gray-500 mt-1">Live updates on your active publication</p>
                                 </div>
-                                ${['approved', 'published'].includes(appStatus) ? `
+                                ${['approved', 'published'].includes(appStatus) ? (
+                                    ((state.payments?.phases || []).reduce((a, p) => a + (p.debited || 0), 0) - (state.payments?.phases || []).reduce((a, p) => a + (p.credited || 0), 0) > 0) ? `
+                                    <button onclick="document.querySelector('[data-tab=\'payment\']').click()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all transform hover:-translate-y-1 text-sm flex items-center whitespace-nowrap">
+                                        <i class="fa-solid fa-triangle-exclamation mr-2"></i> Clear Dues to Publish
+                                    </button>
+                                    ` : `
                                     <button id="card-new-result" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all transform hover:-translate-y-1 text-sm flex items-center whitespace-nowrap">
                                         <i class="fa-solid fa-bolt mr-2"></i> Publish New Result
                                     </button>
-                                ` : ''}
+                                    `
+                                ) : ''}
                             </div>
                             
                             ${timelineHtml}
@@ -988,7 +1086,7 @@ function attachEventListeners() {
                 const res = await fetch(`${API_BASE}/auth/send-code`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email, mode: state.authMode })
                 });
                 
                 const data = await res.json();
@@ -1078,12 +1176,30 @@ function attachEventListeners() {
         const distSelect = document.getElementById('inst-district');
         
         if (stateSelect && distSelect && typeof indiaData !== 'undefined') {
+            const selState = stateSelect.getAttribute('data-selected');
+            const selDist = distSelect.getAttribute('data-selected');
+            
             indiaData.states.forEach(stateObj => {
                 const opt = document.createElement('option');
                 opt.value = stateObj.state;
                 opt.textContent = stateObj.state;
+                if (selState && selState === stateObj.state) opt.selected = true;
                 stateSelect.appendChild(opt);
             });
+            
+            if (selState) {
+                const stateInfo = indiaData.states.find(s => s.state === selState);
+                if (stateInfo && stateInfo.districts) {
+                    stateInfo.districts.forEach(dist => {
+                        const opt = document.createElement('option');
+                        opt.value = dist;
+                        opt.textContent = dist;
+                        if (selDist && selDist === dist) opt.selected = true;
+                        distSelect.appendChild(opt);
+                    });
+                    distSelect.disabled = false;
+                }
+            }
 
             stateSelect.addEventListener('change', (e) => {
                 const selectedState = e.target.value;
@@ -1136,26 +1252,8 @@ function attachEventListeners() {
 
     // PENDING VIEW
     if (state.view === 'pending') {
-        const checkStatus = setInterval(async () => {
-            if (state.view !== 'pending') { clearInterval(checkStatus); return; }
-            
-            try {
-                const res = await fetch(`${API_BASE}/institutes/status?email=${state.email}&t=${Date.now()}`);
-                if (!res.ok) {
-                    clearInterval(checkStatus);
-                    state.errorMsg = 'Your registration was rejected and removed. Please try again with valid data.';
-                    navigate('auth');
-                    return;
-                }
-                const data = await res.json();
-                if (data.status === 'approved') {
-                    clearInterval(checkStatus);
-                    navigate('dashboard');
-                }
-            } catch (err) {
-                // Ignore transient network errors
-            }
-        }, 3000);
+        // Automatically clear session so they are required to sign in after receiving the approval email
+        localStorage.removeItem('igyr_session_email');
     }
 
     // DASHBOARD

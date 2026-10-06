@@ -38,10 +38,39 @@ async function loadApplication() {
 
             if (inst.status === 'pending') {
                 pendingHtml += `
-                    <div class="border rounded p-4 mb-2 bg-yellow-50">
-                        <p class="font-bold">${inst.institute?.name || 'Unknown Institute'}</p>
-                        <p class="text-sm">${inst.email}</p>
-                        <button onclick="updateStatus('${inst.email}', 'approved')" class="bg-green-500 text-white px-3 py-1 rounded text-sm mt-2">Approve</button>
+                    <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm hover:shadow-md transition-shadow relative">
+                        <div class="absolute top-0 left-0 w-full h-1 bg-yellow-400 rounded-t-xl"></div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-lg mb-1">${inst.institute?.name || 'Unknown Institute'}</h4>
+                            
+                            <div class="flex flex-col gap-2 mt-4">
+                                <div class="flex items-center text-sm text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100 w-full overflow-hidden">
+                                    <i class="fa-solid fa-envelope w-7 text-blue-500 text-center shrink-0"></i>
+                                    <span class="truncate font-medium">${inst.email}</span>
+                                </div>
+                                <div class="flex items-center text-sm text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100 w-full overflow-hidden">
+                                    <i class="fa-solid fa-phone w-7 text-green-500 text-center shrink-0"></i>
+                                    <span class="font-medium">${inst.institute?.mobile || 'N/A'}</span>
+                                </div>
+                                <div class="flex items-center text-sm text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100 w-full overflow-hidden">
+                                    <i class="fa-solid fa-location-dot w-7 text-red-500 text-center shrink-0"></i>
+                                    <span class="truncate font-medium">${inst.institute?.district || 'N/A'}, ${inst.institute?.state || 'N/A'}</span>
+                                </div>
+                                <div class="flex items-center text-sm text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100 w-full overflow-hidden">
+                                    <i class="fa-solid fa-building w-7 text-purple-500 text-center shrink-0"></i>
+                                    <span class="font-bold text-gray-800 tracking-wide">${inst.institute?.type || 'N/A'}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-gray-100">
+                                <button onclick="updateStatus('${inst.email}', 'approved')" class="w-full bg-green-600 hover:bg-green-700 text-white px-2 py-3 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center justify-center">
+                                    <i class="fa-solid fa-check mr-2"></i> Approve
+                                </button>
+                                <button onclick="rejectRegistration('${inst.email}')" class="w-full bg-white hover:bg-red-50 text-red-600 border border-red-200 px-2 py-3 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center justify-center">
+                                    <i class="fa-solid fa-xmark mr-2"></i> Reject
+                                </button>
+                            </div>
+                        </div>
                     </div>`;
             }
 
@@ -214,10 +243,15 @@ async function loadApplication() {
             renderPublishList(publishInstitutes);
         }
     } catch (e) {
-
-        console.error(e); pendingContainer.innerHTML = `Error: ` + e.message;
-    }
-}
+        console.error(e);
+        const errHtml = `<div class="col-span-full text-center text-red-500 py-12 border border-red-200 bg-red-50 rounded-xl"><i class="fa-solid fa-triangle-exclamation text-4xl mb-4"></i><p class="text-lg font-bold">Failed to load data</p><p class="text-sm mt-2 text-red-400 text-left bg-white p-4 overflow-x-auto mx-4 border rounded">${e.stack || e.message || e}</p></div>`;
+        if (pendingContainer) pendingContainer.innerHTML = errHtml;
+        if (postContainer) postContainer.innerHTML = errHtml;
+        const regCont = document.getElementById("registered-container");
+        if (regCont) regCont.innerHTML = errHtml;
+        const payCont = document.getElementById("payments-list-container");
+        if (payCont) payCont.innerHTML = errHtml;
+    }}
 
 async function updateStatus(email, newStatus) {
     try {
@@ -645,3 +679,9 @@ window.confirmAction = function(message) {
 
 // Auto-poll for live real-time updates across multiple devices
 setInterval(loadApplication, 3000);
+loadApplication();
+
+window.rejectRegistration = async function(email) {
+    if (!(await confirmAction('Are you sure you want to REJECT this registration? They will receive a rejection email.'))) return;
+    updateStatus(email, 'rejected');
+};

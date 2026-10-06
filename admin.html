@@ -24,33 +24,33 @@
     <aside class="w-full md:w-64 bg-gray-900 text-white flex flex-row md:flex-col md:h-full shadow-2xl flex-shrink-0 border-b md:border-b-0 border-gray-800 z-50">
         <div class="p-3 md:p-6 border-r md:border-r-0 md:border-b border-gray-800 flex flex-row md:flex-col items-center flex-shrink-0">
             <img src="logo.jpg" alt="Logo" class="w-9 h-9 md:w-16 md:h-16 rounded-full border-2 border-white/20 md:mb-3 shadow-lg mr-2 md:mr-0">
-            <h1 class="text-base md:text-xl font-bold tracking-wide text-center">IGYR <span class="font-light hidden md:block text-sm text-gray-400">Admin Hub</span></h1>
+            <h1 class="text-base md:text-xl font-bold tracking-wide text-center">IGYR <span class="font-light block text-sm text-gray-400">Admin Hub</span></h1>
         </div>
         
         <nav class="flex-1 py-2 md:py-6 flex flex-row md:flex-col overflow-x-auto md:overflow-visible gap-1 md:gap-0 md:space-y-2 px-2 md:px-0 items-center md:items-stretch">
             <div onclick="switchTab('publish')" id="tab-publish" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
-                <i class="fa-solid fa-cloud-arrow-up w-6 text-pink-400 text-lg"></i> <span class="hidden md:inline ml-1">Publish Results</span>
+                <i class="fa-solid fa-cloud-arrow-up w-6 text-pink-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Publish Results</span>
             </div>
             <div onclick="switchTab('dashboard')" id="tab-dashboard" class="sidebar-item active px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
-                <i class="fa-solid fa-cart-flatbed w-6 text-blue-400 text-lg"></i> <span class="hidden md:inline ml-1">Active Orders</span>
+                <i class="fa-solid fa-cart-flatbed w-6 text-blue-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Active Orders</span>
             </div>
             <div onclick="switchTab('payments')" id="tab-payments" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
-                <i class="fa-solid fa-wallet w-6 text-emerald-400 text-lg"></i> <span class="hidden md:inline ml-1">Phase Payments</span>
+                <i class="fa-solid fa-wallet w-6 text-emerald-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Phase Payments</span>
             </div>
             <div onclick="switchTab('pending')" id="tab-pending" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
-                <i class="fa-solid fa-user-clock w-6 text-yellow-400 text-lg"></i> <span class="hidden md:inline ml-1">New Registrations</span>
+                <i class="fa-solid fa-user-clock w-6 text-yellow-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">New Registrations</span>
             </div>
             <div onclick="switchTab('pricing')" id="tab-pricing" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
-                <i class="fa-solid fa-indian-rupee-sign w-6 text-green-400 text-lg"></i> <span class="hidden md:inline ml-1">Pricing & Payment Info</span>
+                <i class="fa-solid fa-indian-rupee-sign w-6 text-green-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Pricing & Payment Info</span>
             </div>
             <div onclick="switchTab('institutes')" id="tab-institutes" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
-                <i class="fa-solid fa-building-columns w-6 text-purple-400 text-lg"></i> <span class="hidden md:inline ml-1">Registered Institutes</span>
+                <i class="fa-solid fa-building-columns w-6 text-purple-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Registered Institutes</span>
             </div>
         </nav>
         
         <div class="p-2 md:p-6 border-t border-gray-800 flex-shrink-0">
             <a href="index.html" class="flex items-center justify-center text-red-400 hover:text-white text-sm font-bold transition-colors py-1 md:py-0">
-                <i class="fa-solid fa-power-off w-6"></i> <span class="hidden md:inline">Logout</span>
+                <i class="fa-solid fa-power-off w-6"></i> <span class="ml-2 md:ml-0 whitespace-nowrap">Logout</span>
             </a>
         </div>
     </aside>
@@ -240,7 +240,7 @@
                 </div>
     </main>
 
-    <script src="admin.js?v=2040"></script>
+    <script src="admin.js?v=2048"></script>
     <script>
         function switchTab(tabId) {
             document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active', 'border-l-4'));
