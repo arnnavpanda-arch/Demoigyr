@@ -49,6 +49,9 @@
             <div onclick="switchTab('email-centre')" id="tab-email-centre" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
                 <i class="fa-solid fa-paper-plane w-6 text-cyan-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Email Centre</span>
             </div>
+            <div onclick="switchTab('eligible')" id="tab-eligible" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
+                <i class="fa-solid fa-shield-halved w-6 text-teal-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Eligible Institutes</span>
+            </div>
         </nav>
         
         <div class="p-2 md:p-6 border-t border-gray-800 flex-shrink-0">
@@ -789,9 +792,116 @@ Super Admin Team" class="w-full p-4 border border-gray-200 rounded-xl focus:ring
                 </div>
             </div>
 
+            <!-- Eligible Institutes Section -->
+            <section id="sec-eligible" class="section-content fade-in">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                            <i class="fa-solid fa-shield-halved mr-3 text-teal-600"></i> Eligible Institutes
+                        </h2>
+                        <p class="text-gray-500 text-sm mt-1">Pre-authorize organization emails permitted to register on IGYR and automatically send onboarding invitations.</p>
+                    </div>
+                    <div>
+                        <span id="eligible-count-badge" class="px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 text-xs font-bold rounded-lg shadow-sm">
+                            <i class="fa-solid fa-shield-check mr-1.5"></i> Loading Authorized Emails...
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Security Guidance Alert Banner -->
+                <div class="mb-6 bg-gradient-to-r from-teal-50 to-blue-50 border-l-4 border-teal-500 p-4 rounded-r-xl shadow-sm">
+                    <div class="flex items-start">
+                        <i class="fa-solid fa-circle-info text-teal-600 mt-1 mr-3 text-lg shrink-0"></i>
+                        <div class="text-sm text-gray-700">
+                            <strong class="font-bold text-gray-900 block mb-1">Security & Registration Authorization Policy</strong>
+                            <ul class="list-disc ml-4 space-y-1 text-xs text-gray-600">
+                                <li>Only emails saved in this whitelist are eligible to create an account on the IGYR portal.</li>
+                                <li>Adding an email automatically dispatches an official invitation with link <code class="bg-white px-1.5 py-0.5 rounded border text-teal-700 font-mono">https://demoigyr.vercel.app</code>.</li>
+                                <li><strong>Important:</strong> Adding an email does <span class="underline font-semibold">not</span> mean the institute is officially registered. The institution must submit registration on the portal, which will then appear under <strong>"New Registrations"</strong> for final Super Admin review and verification.</li>
+                                <li>If an unauthorized email attempts to register, the system allows up to 2 attempts. On the 3rd unauthorized attempt, account creation is locked out for 5 minutes for security.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add Eligible Institute Form (Only Email Address Required) -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                    <div class="bg-gradient-to-r from-teal-700 to-teal-800 px-6 py-4 flex items-center justify-between">
+                        <h3 class="font-bold text-white text-base flex items-center">
+                            <i class="fa-solid fa-user-plus mr-2 text-teal-200"></i> Pre-Authorize New Institute Email
+                        </h3>
+                        <span class="text-xs text-teal-100 bg-white/10 px-2.5 py-1 rounded-full font-semibold">Only Email Required</span>
+                    </div>
+                    <div class="p-6">
+                        <form id="form-add-eligible" onsubmit="handleAddEligibleSubmit(event)" class="space-y-4">
+                            <div>
+                                <label for="eligible-email-input" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                                    Institute Official Email Address <span class="text-red-500">*</span>
+                                </label>
+                                <div class="flex flex-col sm:flex-row gap-3">
+                                    <div class="relative flex-1">
+                                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                                            <i class="fa-solid fa-envelope"></i>
+                                        </div>
+                                        <input type="email" id="eligible-email-input" required placeholder="e.g. principal@institution.ac.in or contact@college.edu"
+                                            class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-sm transition-all shadow-sm">
+                                    </div>
+                                    <button type="submit" id="btn-add-eligible" class="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center shadow hover:shadow-md whitespace-nowrap">
+                                        <i class="fa-solid fa-paper-plane mr-2"></i> Authorize & Send Invitation
+                                    </button>
+                                </div>
+                                <p class="text-[11px] text-gray-500 mt-2">
+                                    <i class="fa-solid fa-shield-check text-teal-600 mr-1"></i> Saving will immediately send the official IGYR invitation letter to this email with registration instructions.
+                                </p>
+                            </div>
+                            <div id="eligible-alert-box" class="hidden"></div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Eligible Institutes List -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-5 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gray-50/50">
+                        <div class="flex items-center gap-3">
+                            <h3 class="font-bold text-gray-800 text-base">Authorized Organizations Whitelist</h3>
+                            <button onclick="loadEligibleInstitutes(true)" title="Refresh list" class="text-gray-400 hover:text-teal-600 p-1.5 rounded-lg hover:bg-teal-50 text-sm transition-colors">
+                                <i class="fa-solid fa-rotate"></i>
+                            </button>
+                        </div>
+                        <div class="relative w-full md:w-72">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-gray-400 text-xs"></i>
+                            <input type="text" id="eligible-search-input" onkeyup="filterEligibleInstitutes()" placeholder="Search authorized email..."
+                                class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto min-h-[300px]">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-800 text-white text-xs uppercase tracking-wider">
+                                <tr>
+                                    <th class="p-3.5 pl-6 font-semibold">Institute Email</th>
+                                    <th class="p-3.5 font-semibold">Pre-Approved On</th>
+                                    <th class="p-3.5 font-semibold">Invitation Email</th>
+                                    <th class="p-3.5 font-semibold">Portal Account Status</th>
+                                    <th class="p-3.5 pr-6 font-semibold text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="eligible-table-body" class="divide-y divide-gray-100">
+                                <tr>
+                                    <td colspan="5" class="text-center py-12 text-gray-400">
+                                        <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-teal-600"></i>
+                                        <p class="text-sm">Loading authorized institutes...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
     </main>
 
-    <script src="admin.js?v=2065"></script>
+    <script src="admin.js?v=2075"></script>
     <script>
         function switchTab(tabId) {
             document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active', 'border-l-4'));
@@ -806,6 +916,8 @@ Super Admin Team" class="w-full p-4 border border-gray-200 rounded-xl focus:ring
                 if (typeof refreshEmailCentre === 'function') refreshEmailCentre();
             } else if (tabId === 'pricing') {
                 if (typeof loadPricing === 'function') loadPricing();
+            } else if (tabId === 'eligible') {
+                if (typeof loadEligibleInstitutes === 'function') loadEligibleInstitutes();
             } else {
                 if (typeof loadApplication === 'function') loadApplication();
             }

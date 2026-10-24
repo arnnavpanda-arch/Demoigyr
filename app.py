@@ -10,6 +10,7 @@ from email_service import send_email, send_email_with_attachment, send_email_ex
 from pdf_generator import generate_offer_letter_pdf
 import random
 import os
+import time
 from datetime import datetime
 
 app = Flask(__name__)
@@ -70,6 +71,29 @@ def server_error(e):
 # Temporary in-memory store for OTPs (In a real app, use Redis or MongoDB with TTL)
 # Format: { "email@test.com": { "otp": "1234", "expires": timestamp } }
 otp_store = {}
+
+# Security rate-limiting & 5-minute lockout store for unauthorized registration attempts
+# Format: { "client_ip": { "attempts": count, "locked_until": timestamp } }
+registration_lockouts = {}
+
+def ensure_eligible_seeded():
+    try:
+        db = get_db()
+        for inst in db['institutes'].find({}, {"email": 1, "created_at": 1, "status": 1}):
+            em = inst.get('email')
+            if em:
+                db['eligible_institutes'].update_one(
+                    {"email": em},
+                    {"$setOnInsert": {
+                        "email": em,
+                        "added_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                        "status": "eligible",
+                        "registered": True
+                    }},
+                    upsert=True
+                )
+    except Exception as e:
+        print("ensure_eligible_seeded error:", e)
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -136,7 +160,7 @@ def resend_receipt():
 
 @app.route('/api/auth/send-code', methods=['POST'])
 def send_code():
-    data = request.json
+    data = request.json or {}
     email = data.get('email', '').strip().lower()
     mode = data.get('mode', 'login')
     
@@ -146,10 +170,56 @@ def send_code():
     db = get_db()
     inst = db['institutes'].find_one({"email": email})
     
+    now = time.time()
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or '127.0.0.1').split(',')[0].strip()
+    
     if mode == 'register':
+        # 1. Check if client IP is currently in 5-minute security lockout
+        ip_state = registration_lockouts.get(client_ip, {})
+        locked_until = ip_state.get('locked_until', 0)
+        if locked_until > now:
+            remaining = int(locked_until - now)
+            return jsonify({
+                "error": f"Security Lockout Active: Account creation is locked for {remaining} seconds due to multiple unauthorized attempts.",
+                "locked": True,
+                "remaining_seconds": remaining
+            }), 429
+            
+        # 2. Check if email is in the eligible_institutes whitelist
+        eligible_record = db['eligible_institutes'].find_one({"email": email})
+        if not eligible_record:
+            # Unauthorized email! Increment failed attempts
+            if client_ip not in registration_lockouts:
+                registration_lockouts[client_ip] = {"attempts": 0, "locked_until": 0}
+                
+            registration_lockouts[client_ip]["attempts"] += 1
+            current_attempts = registration_lockouts[client_ip]["attempts"]
+            
+            if current_attempts >= 3:
+                # 3rd attempt reached -> lock out for 5 minutes (300 seconds)
+                registration_lockouts[client_ip]["locked_until"] = now + 300
+                registration_lockouts[client_ip]["attempts"] = 0 # reset counter after locking
+                return jsonify({
+                    "error": "Security Lockout Activated: 3 failed registration attempts with an unauthorized email. Account creation is locked for 5 minutes.",
+                    "locked": True,
+                    "remaining_seconds": 300
+                }), 429
+            else:
+                attempts_left = 3 - current_attempts
+                return jsonify({
+                    "error": f"This email is not eligible to create an account in IGYR. Only pre-approved organizations added by the administrator can register. (Attempt {current_attempts} of 3. {attempts_left} attempt remaining before 5-minute security lockout.)",
+                    "locked": False,
+                    "attempts": current_attempts,
+                    "attempts_left": attempts_left
+                }), 403
+
+        # Email is eligible: reset failed attempts
+        if client_ip in registration_lockouts:
+            registration_lockouts[client_ip]["attempts"] = 0
+            
         if inst:
             if inst.get('status') == 'pending':
-                return jsonify({"error": "Your request is under processing waiting.................."}), 400
+                return jsonify({"error": "Your request is under processing waiting for final admin approval."}), 400
             else:
                 return jsonify({"error": "Email already registered. Please sign in."}), 400
     elif mode == 'login':
@@ -215,10 +285,16 @@ def verify_code():
 
 @app.route('/api/institutes/register', methods=['POST'])
 def register_institute():
-    data = request.json
+    data = request.json or {}
     email = data.get('email', '').strip().lower()
     
     db = get_db()
+    
+    # Security check: must be in eligible_institutes
+    eligible_record = db['eligible_institutes'].find_one({"email": email})
+    if not eligible_record:
+        return jsonify({"error": "This email address is not eligible or pre-approved to register. Please contact the administrator."}), 403
+        
     institutes_col = db['institutes']
     
     import random
@@ -234,6 +310,12 @@ def register_institute():
     }
     
     institutes_col.update_one({"email": email}, {"$set": institute_doc}, upsert=True)
+    
+    # Update eligible_institutes status to reflect registration submitted
+    db['eligible_institutes'].update_one(
+        {"email": email},
+        {"$set": {"registered": True, "registered_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")}}
+    )
     
     # Send confirmation email to user
     send_email(email, "Registration Received - India Get Your Result", 
@@ -1385,7 +1467,138 @@ def email_centre_get_offer_letters():
     return jsonify({"offers": offers}), 200
 
 
+# ==========================================
+# ELIGIBLE INSTITUTES (PRE-APPROVED WHITELIST)
+# ==========================================
+
+def send_eligible_invite_email(email):
+    subject = "Official Invitation: Your Organization is Eligible to Create an Account on IGYR"
+    body_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background: #ffffff;">
+        <div style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 25px 20px; text-align: center; color: white;">
+            <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 1px;">IGYR</h1>
+            <p style="margin: 5px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: #bfdbfe;">India Get Your Result</p>
+        </div>
+        <div style="padding: 30px 35px; color: #374151; font-size: 15px; line-height: 1.6;">
+            <h2 style="color: #1f2937; margin-top: 0; font-size: 20px;">Account Pre-Approval Confirmation</h2>
+            <p>Dear Administrator,</p>
+            <p>We are pleased to inform you that your organization's email address (<strong>{email}</strong>) has been officially pre-approved and marked as <strong>eligible to create an account</strong> on India Get Your Result (IGYR).</p>
+            <p>Please click the button below to open the registration portal, create your account, and submit your profile details:</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="https://demoigyr.vercel.app" style="background: #2563eb; color: #ffffff; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
+                    Open IGYR & Create Account
+                </a>
+            </div>
+            <p style="font-size: 13px; color: #6b7280; text-align: center;">
+                Or open directly: <a href="https://demoigyr.vercel.app" style="color: #2563eb;">https://demoigyr.vercel.app</a>
+            </p>
+
+            <div style="margin-top: 25px; padding: 15px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px; font-size: 13px; color: #92400e;">
+                <strong>Next Steps:</strong><br>
+                1. Open <a href="https://demoigyr.vercel.app" style="color: #b45309; font-weight: bold;">https://demoigyr.vercel.app</a> and select <strong>Create Account</strong> using this email (<code>{email}</code>).<br>
+                2. Enter your institution's profile and contact information.<br>
+                3. After submission, your registration will be reviewed and verified by the Super Admin Team for final approval.
+            </div>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #4b5563;">
+                Best regards,<br>
+                <strong>Super Admin Team</strong><br>
+                India Get Your Result (IGYR)<br>
+                <span style="font-size: 12px; color: #9ca3af;">Official Portal: https://demoigyr.vercel.app</span>
+            </div>
+        </div>
+        <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #f3f4f6; color: #9ca3af; font-size: 12px;">
+            © 2026 India Get Your Result (IGYR). All rights reserved.
+        </div>
+    </div>
+    """
+    return send_email(email, subject, body_html)
+
+
+@app.route('/api/admin/eligible-institutes', methods=['GET'])
+def admin_get_eligible_institutes():
+    db = get_db()
+    ensure_eligible_seeded()
+    cursor = db['eligible_institutes'].find({}, {"_id": 0}).sort("added_at", -1)
+    eligible_list = list(cursor)
+    
+    # Enhance with current registration status from institutes collection
+    for item in eligible_list:
+        email = item.get('email', '')
+        inst = db['institutes'].find_one({"email": email})
+        if inst:
+            item['registration_status'] = inst.get('status', 'pending')
+            item['institute_name'] = inst.get('institute', {}).get('name', 'N/A')
+            item['igyr_id'] = inst.get('igyr_id', 'N/A')
+        else:
+            item['registration_status'] = 'not_registered'
+            item['institute_name'] = 'Not Registered Yet'
+            item['igyr_id'] = 'N/A'
+            
+    return jsonify({"eligible": eligible_list}), 200
+
+
+@app.route('/api/admin/eligible-institutes', methods=['POST'])
+def admin_add_eligible_institute():
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    
+    if not email or '@' not in email or '.' not in email:
+        return jsonify({"error": "Please provide a valid email address."}), 400
+        
+    db = get_db()
+    
+    # Check if already in institutes
+    inst = db['institutes'].find_one({"email": email})
+    is_registered = bool(inst)
+    
+    record = {
+        "email": email,
+        "added_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "eligible",
+        "registered": is_registered
+    }
+    
+    db['eligible_institutes'].update_one({"email": email}, {"$set": record}, upsert=True)
+    
+    # Send the pre-approval invitation email
+    sent = send_eligible_invite_email(email)
+    
+    return jsonify({
+        "message": f"Organization '{email}' is now eligible to create an account. Invitation email {'sent' if sent else 'queued'}!",
+        "email": email,
+        "invite_sent": sent
+    }), 200
+
+
+@app.route('/api/admin/eligible-institutes', methods=['DELETE'])
+def admin_delete_eligible_institute():
+    email = (request.args.get('email') or (request.json and request.json.get('email')) or '').strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+        
+    db = get_db()
+    db['eligible_institutes'].delete_one({"email": email})
+    return jsonify({"message": f"Email '{email}' removed from eligible list."}), 200
+
+
+@app.route('/api/admin/eligible-institutes/resend', methods=['POST'])
+def admin_resend_eligible_invite():
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+        
+    sent = send_eligible_invite_email(email)
+    if sent:
+        return jsonify({"message": f"Invitation email resent to {email} successfully!"}), 200
+    else:
+        return jsonify({"error": "Failed to send invitation email. Please check SMTP connection."}), 500
+
+
 if __name__ == '__main__':
     # Initialize DB connection on startup
     get_db()
+    ensure_eligible_seeded()
     app.run(host='0.0.0.0', port=5001, debug=True)

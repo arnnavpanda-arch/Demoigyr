@@ -825,6 +825,7 @@ function initAdmin() {
     loadPricing();
     if (typeof initPricingForm === 'function') initPricingForm();
     if (typeof refreshEmailCentre === 'function') refreshEmailCentre();
+    if (typeof loadEligibleInstitutes === 'function') loadEligibleInstitutes();
 }
 
 if (document.readyState === 'loading') {
@@ -1590,4 +1591,253 @@ window.insertPlaceholder = function(textareaId, ph) {
     const end = el.selectionEnd;
     el.value = el.value.substring(0, start) + ph + el.value.substring(end);
     el.focus();
+};
+
+// ==========================================
+// ELIGIBLE INSTITUTES PRE-APPROVAL MODULE
+// ==========================================
+
+let cachedEligibleInstitutes = [];
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+window.loadEligibleInstitutes = async function(showFeedback = false) {
+    const tbody = document.getElementById('eligible-table-body');
+    const badge = document.getElementById('eligible-count-badge');
+    if (!tbody) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/eligible-institutes?t=${Date.now()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const list = Array.isArray(data.eligible) ? data.eligible : [];
+        cachedEligibleInstitutes = list;
+
+        if (badge) {
+            badge.innerHTML = `<i class="fa-solid fa-shield-check mr-1.5"></i> ${list.length} Authorized Organization${list.length === 1 ? '' : 's'}`;
+        }
+
+        renderEligibleTable(list);
+
+        if (showFeedback && typeof showToast === 'function') {
+            showToast('Eligible institutes list updated', 'success');
+        }
+    } catch (err) {
+        console.error('Failed to load eligible institutes:', err);
+        if (tbody && cachedEligibleInstitutes.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center py-8 text-red-500">
+                        <i class="fa-solid fa-triangle-exclamation text-xl mb-1"></i>
+                        <p class="text-xs">Failed to load authorized institutes. Ensure the backend is running.</p>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+};
+
+function renderEligibleTable(list) {
+    const tbody = document.getElementById('eligible-table-body');
+    if (!tbody) return;
+
+    if (!list || list.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center py-12 text-gray-400">
+                    <i class="fa-solid fa-shield-slash text-3xl mb-2 text-gray-300"></i>
+                    <p class="font-medium text-gray-500">No authorized emails found</p>
+                    <p class="text-xs text-gray-400 mt-1">Add an organization email above to authorize account creation and send an invitation.</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    let rowsHtml = '';
+    list.forEach(item => {
+        const email = item.email || '';
+        const addedAt = item.added_at || 'Existing Account';
+        const regStatus = item.registration_status || (item.registered ? 'approved' : 'not_registered');
+        const instName = item.institute_name && item.institute_name !== 'Not Registered Yet' ? item.institute_name : '';
+        const igyrId = item.igyr_id && item.igyr_id !== 'N/A' ? item.igyr_id : '';
+
+        let statusBadge = '';
+        if (regStatus === 'approved') {
+            statusBadge = `
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                    <i class="fa-solid fa-circle-check mr-1.5 text-green-600"></i> Registered & Approved
+                </span>
+                ${igyrId ? `<div class="text-[11px] font-mono text-gray-500 mt-0.5">${igyrId}</div>` : ''}
+            `;
+        } else if (regStatus === 'pending') {
+            statusBadge = `
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <i class="fa-solid fa-hourglass-half mr-1.5 text-amber-600"></i> Submitted (Pending Review)
+                </span>
+                <div class="text-[10px] text-amber-600 mt-0.5">Check "New Registrations"</div>
+            `;
+        } else if (regStatus === 'rejected') {
+            statusBadge = `
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                    <i class="fa-solid fa-circle-xmark mr-1.5 text-red-600"></i> Registration Rejected
+                </span>
+            `;
+        } else {
+            statusBadge = `
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                    <i class="fa-solid fa-envelope-open mr-1.5 text-blue-500"></i> Not Registered Yet
+                </span>
+                <div class="text-[10px] text-gray-400 mt-0.5">Invite sent, waiting for registration</div>
+            `;
+        }
+
+        rowsHtml += `
+            <tr class="hover:bg-teal-50/20 transition-colors">
+                <td class="p-3.5 pl-6 font-medium text-gray-800">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-envelope text-teal-600 text-xs"></i>
+                        <span class="font-mono text-sm">${escapeHtml(email)}</span>
+                    </div>
+                    ${instName ? `<div class="text-xs text-gray-500 mt-0.5 pl-5">${escapeHtml(instName)}</div>` : ''}
+                </td>
+                <td class="p-3.5 text-xs text-gray-500 whitespace-nowrap">
+                    <i class="fa-regular fa-clock mr-1 text-gray-400"></i> ${escapeHtml(addedAt)}
+                </td>
+                <td class="p-3.5 whitespace-nowrap">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <i class="fa-solid fa-paper-plane mr-1 text-emerald-500 text-[10px]"></i> Sent
+                    </span>
+                </td>
+                <td class="p-3.5">
+                    ${statusBadge}
+                </td>
+                <td class="p-3.5 pr-6 text-right whitespace-nowrap space-x-1">
+                    <button onclick="resendEligibleInvite('${escapeHtml(email)}')" title="Resend onboarding invitation email"
+                        class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors border border-blue-200 inline-flex items-center">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> Resend Invite
+                    </button>
+                    <button onclick="removeEligibleInstitute('${escapeHtml(email)}')" title="Revoke eligibility"
+                        class="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold transition-colors border border-red-200 inline-flex items-center">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Remove
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = rowsHtml;
+}
+
+window.filterEligibleInstitutes = function() {
+    const query = (document.getElementById('eligible-search-input')?.value || '').toLowerCase().trim();
+    if (!query) {
+        renderEligibleTable(cachedEligibleInstitutes);
+        return;
+    }
+    const filtered = cachedEligibleInstitutes.filter(item => {
+        const email = (item.email || '').toLowerCase();
+        const name = (item.institute_name || '').toLowerCase();
+        return email.includes(query) || name.includes(query);
+    });
+    renderEligibleTable(filtered);
+};
+
+window.handleAddEligibleSubmit = async function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const input = document.getElementById('eligible-email-input');
+    const btn = document.getElementById('btn-add-eligible');
+    const alertBox = document.getElementById('eligible-alert-box');
+    if (!input) return;
+
+    const email = input.value.trim().toLowerCase();
+    if (!email || !email.includes('@') || !email.includes('.')) {
+        if (alertBox) {
+            alertBox.className = 'p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-bold';
+            alertBox.innerHTML = '<i class="fa-solid fa-circle-exclamation mr-1.5"></i> Please enter a valid organization email address.';
+        }
+        return;
+    }
+
+    const originalBtn = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Authorizing & Sending...';
+    }
+    if (alertBox) alertBox.className = 'hidden';
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/eligible-institutes`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to add eligible institute');
+        }
+
+        if (alertBox) {
+            alertBox.className = 'p-3 bg-green-50 border border-green-200 rounded-xl text-green-800 text-xs font-semibold flex items-center justify-between';
+            alertBox.innerHTML = `
+                <span><i class="fa-solid fa-circle-check text-green-600 mr-2"></i> <strong>Success!</strong> ${escapeHtml(email)} is now authorized to create an account, and an invitation email has been dispatched.</span>
+                <button type="button" onclick="this.parentElement.className='hidden'" class="text-green-700 hover:text-green-900 ml-2 font-bold">&times;</button>
+            `;
+        }
+
+        input.value = '';
+        await loadEligibleInstitutes();
+    } catch (err) {
+        if (alertBox) {
+            alertBox.className = 'p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-bold';
+            alertBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> ${escapeHtml(err.message)}`;
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalBtn;
+        }
+    }
+};
+
+window.resendEligibleInvite = async function(email) {
+    if (!email) return;
+    try {
+        const res = await fetch(`${API_BASE}/admin/eligible-institutes/resend`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to resend invite');
+        alert(`Invitation email successfully resent to: ${email}`);
+    } catch (err) {
+        alert(`Error resending invitation: ${err.message}`);
+    }
+};
+
+window.removeEligibleInstitute = async function(email) {
+    if (!email) return;
+    const confirmed = confirm(`Are you sure you want to remove '${email}' from the eligible list?\n\nThis will revoke their authorization to create an account.`);
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/eligible-institutes?email=${encodeURIComponent(email)}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to remove');
+        await loadEligibleInstitutes();
+    } catch (err) {
+        alert(`Failed to remove: ${err.message}`);
+    }
 };

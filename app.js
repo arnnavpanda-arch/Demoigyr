@@ -25,6 +25,52 @@ const state = {
     pricing: {normal: 50, excel: 100, both: 150}
 };
 
+// Registration Security Lockout Tracker (5-minute security lock)
+let regLockoutInterval = null;
+
+function getLockoutRemainingSeconds() {
+    const until = parseInt(localStorage.getItem('igyr_reg_lockout_until') || '0', 10);
+    if (!until) return 0;
+    const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    if (remaining <= 0) {
+        localStorage.removeItem('igyr_reg_lockout_until');
+    }
+    return remaining;
+}
+
+function setRegistrationLockout(seconds = 300) {
+    const target = Date.now() + (seconds * 1000);
+    localStorage.setItem('igyr_reg_lockout_until', target.toString());
+}
+
+function setupLockoutCountdown() {
+    if (regLockoutInterval) {
+        clearInterval(regLockoutInterval);
+        regLockoutInterval = null;
+    }
+
+    const timerEl = document.getElementById('reg-lockout-timer');
+    if (!timerEl) return;
+
+    regLockoutInterval = setInterval(() => {
+        const remaining = getLockoutRemainingSeconds();
+        const el = document.getElementById('reg-lockout-timer');
+        if (remaining <= 0) {
+            clearInterval(regLockoutInterval);
+            regLockoutInterval = null;
+            localStorage.removeItem('igyr_reg_lockout_until');
+            state.errorMsg = '';
+            render();
+            return;
+        }
+        if (el) {
+            const m = Math.floor(remaining / 60);
+            const s = remaining % 60;
+            el.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
 // Main Container
 const appContainer = document.getElementById('app-container');
 
@@ -131,6 +177,8 @@ function getErrorHTML() {
 
 function getAuthView() {
     const isLogin = state.authMode === 'login';
+    const lockoutSec = getLockoutRemainingSeconds();
+    const isLockedOut = !isLogin && (lockoutSec > 0);
 
     const loginForm = `
         <h3 class="text-2xl font-bold text-gray-800 mb-2">Welcome Back!</h3>
@@ -152,11 +200,55 @@ function getAuthView() {
         </form>
     `;
 
+    const mins = Math.floor(lockoutSec / 60);
+    const secs = lockoutSec % 60;
+    const formattedTimer = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+    const lockedRegisterView = `
+        <div class="text-center py-2 fade-in">
+            <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-red-200 shadow-sm animate-pulse">
+                <i class="fa-solid fa-lock text-3xl"></i>
+            </div>
+            <h3 class="text-xl font-extrabold text-red-900 mb-1">Security Lockout Active</h3>
+            <p class="text-xs text-red-600 font-medium mb-4 px-2 leading-relaxed">
+                Too many unauthorized registration attempts detected. For system security, account creation is temporarily suspended.
+            </p>
+            
+            <div class="bg-red-50 border-2 border-red-200 rounded-2xl p-5 mb-4 shadow-inner">
+                <span class="text-[11px] font-bold text-gray-500 uppercase tracking-widest block mb-1">Portal Unlocks In</span>
+                <div id="reg-lockout-timer" class="font-mono text-4xl font-extrabold text-red-600 tracking-wider">
+                    ${formattedTimer}
+                </div>
+                <div class="text-[11px] text-gray-500 mt-2 flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-arrows-rotate text-red-500 text-xs"></i>
+                    <span>Countdown timer persists even if browser is refreshed.</span>
+                </div>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left text-xs text-amber-800 mb-5 shadow-sm">
+                <p class="font-bold mb-1"><i class="fa-solid fa-shield-halved text-amber-600 mr-1"></i> Pre-Approval Requirement</p>
+                <p class="text-[11px] text-amber-700 leading-normal">Only institutions whose official email is pre-authorized by IGYR Super Admin can create an account. Unauthorized attempts trigger a 5-minute security lockout after 3 tries.</p>
+            </div>
+
+            <button disabled class="w-full bg-gray-200 text-gray-400 font-bold py-3.5 px-4 rounded-xl cursor-not-allowed text-sm">
+                <i class="fa-solid fa-ban mr-2"></i> Account Creation Locked
+            </button>
+        </div>
+    `;
+
     const registerForm = `
-        <h3 class="text-2xl font-bold text-gray-800 mb-2">Create Account</h3>
-        <p class="text-gray-500 mb-6 text-sm">Join IGYR to publish your results seamlessly</p>
+        <h3 class="text-2xl font-bold text-gray-800 mb-1">Create Account</h3>
+        <p class="text-gray-500 mb-4 text-sm">Join IGYR to publish your results seamlessly</p>
+        
+        <div class="bg-blue-50/90 border border-blue-200 rounded-xl p-3 mb-4 text-xs text-blue-900 flex items-start gap-2.5">
+            <i class="fa-solid fa-shield-halved text-blue-600 mt-0.5 shrink-0 text-sm"></i>
+            <div>
+                <span class="font-bold">Security Pre-Authorization:</span> Only organization emails pre-approved by the IGYR Admin can register. Unauthorized attempts will be locked out after 3 tries.
+            </div>
+        </div>
+
         ${getErrorHTML()}
-        <form id="auth-form" class="space-y-5">
+        <form id="auth-form" class="space-y-4">
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Institute Name</label>
                 <div class="relative">
@@ -197,11 +289,11 @@ function getAuthView() {
             </div>
 
             <div class="w-full md:w-1/2 bg-white/90 backdrop-blur-xl p-10 flex flex-col justify-center">
-                <div class="flex justify-between items-center mb-8 bg-gray-100 p-1.5 rounded-xl shadow-inner">
+                <div class="flex justify-between items-center mb-6 bg-gray-100 p-1.5 rounded-xl shadow-inner">
                     <button id="tab-login" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-primary shadow-md transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'}">Sign In</button>
                     <button id="tab-register" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-primary shadow-md transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'}">Create Account</button>
                 </div>
-                <div id="auth-content" class="fade-in">${isLogin ? loginForm : registerForm}</div>
+                <div id="auth-content" class="fade-in">${isLogin ? loginForm : (isLockedOut ? lockedRegisterView : registerForm)}</div>
             </div>
         </div>
     </div>`;
@@ -243,50 +335,187 @@ function getVerifyView() {
 
 function getPolicyView() {
     return `
-    <div class="min-h-screen bg-gray-50 py-12 px-4 fade-in">
-        <div class="max-w-2xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-            <div class="bg-gradient-to-r from-gray-900 to-gray-800 p-8 text-white text-center">
-                <i class="fa-solid fa-file-contract text-4xl text-accent mb-4"></i>
-                <h2 class="text-2xl font-bold">Result Publishing Policies</h2>
-                <p class="text-gray-300 text-sm mt-2">Please read and agree to our terms before setting up your institution</p>
+    <div class="min-h-screen bg-gray-50 py-10 px-4 fade-in">
+        <div class="max-w-3xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+            <div class="bg-gradient-to-r from-gray-900 via-primary to-blue-900 p-8 text-white text-center relative overflow-hidden">
+                <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjIiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] opacity-50"></div>
+                <div class="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/20 backdrop-blur-sm shadow-inner relative z-10">
+                    <i class="fa-solid fa-scale-balanced text-3xl text-yellow-300"></i>
+                </div>
+                <span class="inline-block px-3 py-1 bg-white/15 rounded-full text-[11px] font-bold uppercase tracking-wider text-blue-200 mb-2 relative z-10 border border-white/10">Step 2 of 2: Terms of Service</span>
+                <h2 class="text-2xl md:text-3xl font-extrabold relative z-10">IGYR – Privacy Policy & Terms and Conditions</h2>
+                <p class="text-blue-100 text-xs md:text-sm mt-2 max-w-xl mx-auto leading-relaxed relative z-10">
+                    Please review our institutional policies, data protection guidelines, and verification rules. You must accept these terms to submit your registration for approval.
+                </p>
             </div>
-            <div class="p-8 space-y-6">
-                <div class="flex gap-4">
-                    <div class="w-10 h-10 rounded-full bg-blue-50 flex-shrink-0 flex items-center justify-center text-primary"><i class="fa-solid fa-lock"></i></div>
-                    <div>
-                        <h4 class="font-bold text-gray-800">1. Data Confidentiality</h4>
-                        <p class="text-sm text-gray-600 mt-1">All student records and examination results submitted are strictly confidential and protected with enterprise-grade security.</p>
-                    </div>
-                </div>
-                <div class="flex gap-4">
-                    <div class="w-10 h-10 rounded-full bg-orange-50 flex-shrink-0 flex items-center justify-center text-accent"><i class="fa-solid fa-certificate"></i></div>
-                    <div>
-                        <h4 class="font-bold text-gray-800">2. Data Validity</h4>
-                        <p class="text-sm text-gray-600 mt-1">The institution holds full responsibility for the accuracy and validity of the published results. Admin verification is required.</p>
-                    </div>
-                </div>
-                <div class="flex gap-4">
-                    <div class="w-10 h-10 rounded-full bg-green-50 flex-shrink-0 flex items-center justify-center text-green-600"><i class="fa-solid fa-indian-rupee-sign"></i></div>
-                    <div>
-                        <h4 class="font-bold text-gray-800">3. Payment Terms</h4>
-                        <p class="text-sm text-gray-600 mt-1">Result processing begins only after full payment per student is completed based on your selected service tier.</p>
-                    </div>
-                </div>
-                
-                <form id="policy-form" class="mt-8 pt-6 border-t">
-                    <label class="flex items-start gap-3 cursor-pointer group mb-6">
-                        <div class="relative flex items-center mt-1">
-                            <input type="checkbox" required class="peer w-5 h-5 opacity-0 absolute">
-                            <div class="w-5 h-5 border-2 border-gray-300 rounded peer-checked:bg-primary peer-checked:border-primary flex items-center justify-center transition-colors">
-                                <i class="fa-solid fa-check text-white text-xs opacity-0 peer-checked:opacity-100"></i>
-                            </div>
+
+            <div class="p-6 md:p-8">
+                <!-- 9 Policy Points Container -->
+                <div class="space-y-4 max-h-[460px] overflow-y-auto pr-2 scrollbar-thin border border-gray-100 rounded-2xl p-4 bg-gray-50/50">
+                    
+                    <!-- 1. Privacy Policy -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-blue-50 text-primary flex items-center justify-center font-bold text-sm shrink-0 border border-blue-100">
+                            1
                         </div>
-                        <span class="text-sm text-gray-700 font-medium group-hover:text-gray-900">I have read and agree to the IGYR policies, terms, and conditions for result publication.</span>
-                    </label>
-                    <button type="submit" class="w-full bg-primary text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition-colors shadow-lg">
-                        Accept & Continue Setup <i class="fa-solid fa-arrow-right ml-2"></i>
-                    </button>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base flex items-center gap-2">
+                                Privacy Policy
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                IGYR (India Get Your Result) respects the privacy of institutes, users, and students. We collect necessary information to provide our services, manage accounts, and publish examination results.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 2. Data Protection -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0 border border-indigo-100">
+                            2
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Data Protection
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                We take reasonable security measures to protect institute information, student records, examination results, and account details against unauthorized access, misuse, and disclosure.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 3. Institute Registration -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold text-sm shrink-0 border border-teal-100">
+                            3
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Institute Registration
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                Only email addresses authorized by the IGYR administration can be used to create new institute accounts. Users must provide accurate information and complete the required verification process.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 4. Account Verification and Approval -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm shrink-0 border border-amber-100">
+                            4
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Account Verification and Approval
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                Every new institute must verify its registered email address and wait for final approval from the IGYR administration. Email eligibility does not guarantee account approval.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 5. Account Security -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold text-sm shrink-0 border border-cyan-100">
+                            5
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Account Security
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                Users must keep their login credentials confidential and must not attempt unauthorized access, bypass security controls, or misuse another institute’s information.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 6. Registration Lockout Policy -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center font-bold text-sm shrink-0 border border-red-100">
+                            6
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Registration Lockout Policy
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                After three failed eligibility attempts within the configured attempt window, the registration system will temporarily lock the relevant security identifier for five minutes. The lock remains active after refreshing the page and expires automatically after five minutes, unless another security restriction applies.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 7. Result Publishing Policy -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm shrink-0 border border-purple-100">
+                            7
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Result Publishing Policy
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                Institutes are responsible for ensuring that uploaded student details, examination marks, grades, and results are accurate and authorized for publication. Any errors should be reported promptly for correction.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 8. Acceptable Use and Account Suspension -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm shrink-0 border border-orange-100">
+                            8
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Acceptable Use and Account Suspension
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                Users must not submit false information, manipulate results, misuse student data, or engage in fraudulent activities. IGYR may restrict or suspend accounts for violations of its policies, subject to applicable law.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 9. Data Retention and Service Availability -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-3.5 hover:border-blue-300 transition-colors">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-100">
+                            9
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-sm md:text-base">
+                                Data Retention and Service Availability
+                            </h4>
+                            <p class="text-xs md:text-sm text-gray-600 mt-1 leading-relaxed">
+                                Information is retained according to applicable legal requirements and operational needs. IGYR aims to provide reliable services but cannot guarantee uninterrupted access or absolute data security.
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right-Mark Checkbox & Submission Form -->
+                <form id="policy-form" class="mt-6 pt-5 border-t border-gray-200">
+                    <div class="bg-blue-50/70 border-2 border-blue-200 rounded-2xl p-4 mb-6 hover:bg-blue-50 transition-colors">
+                        <label class="flex items-start gap-3.5 cursor-pointer select-none">
+                            <div class="relative flex items-center mt-0.5 shrink-0">
+                                <input type="checkbox" id="policy-agree-checkbox" required class="peer w-6 h-6 opacity-0 absolute cursor-pointer">
+                                <div class="w-6 h-6 border-2 border-gray-400 rounded-lg peer-checked:bg-primary peer-checked:border-primary flex items-center justify-center transition-all bg-white shadow-sm peer-focus:ring-2 peer-focus:ring-primary/20">
+                                    <i class="fa-solid fa-check text-white text-sm opacity-0 peer-checked:opacity-100 font-bold"></i>
+                                </div>
+                            </div>
+                            <span class="text-xs md:text-sm text-gray-800 font-semibold leading-relaxed">
+                                I have read, understood, and accept the <strong>IGYR – Privacy Policy & Terms and Conditions</strong>. I confirm that our institution's registration details are accurate and agree to abide by all operational policies while awaiting final administrative approval.
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row items-center gap-3">
+                        <button type="button" onclick="navigate('profileSetup')" class="w-full sm:w-auto px-6 py-4 border border-gray-300 hover:bg-gray-100 text-gray-700 font-bold rounded-xl transition-colors text-sm flex items-center justify-center">
+                            <i class="fa-solid fa-arrow-left mr-2"></i> Edit Details
+                        </button>
+                        <button type="submit" id="btn-submit-policy" class="flex-1 w-full bg-gradient-to-r from-primary to-blue-600 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-primary/40 transform hover:-translate-y-0.5 text-base flex items-center justify-center">
+                            <i class="fa-solid fa-paper-plane mr-2"></i> Submit Registration for Approval
+                        </button>
+                    </div>
                 </form>
+
             </div>
         </div>
     </div>`;
@@ -306,9 +535,9 @@ function getProfileSetupView() {
                     <p class="text-sm text-red-600">Your previous application was rejected by the admin. Please correct your details below and reapply.</p>
                 </div>
                 ` : `
-                <span class="text-xs font-bold uppercase tracking-widest text-primary bg-blue-50 px-3 py-1 rounded-full mb-3 inline-block">Step 2 of 2</span>
+                <span class="text-xs font-bold uppercase tracking-widest text-primary bg-blue-50 px-3 py-1 rounded-full mb-3 inline-block">Step 1 of 2: Institution Profile</span>
                 <h2 class="text-3xl font-bold text-gray-800">Complete Institution Profile</h2>
-                <p class="text-gray-500 mt-2">We need these details to verify your account before you can publish results.</p>
+                <p class="text-gray-500 mt-2">Enter your institutional details before reviewing the official terms and conditions.</p>
                 `}
             </div>
             
@@ -347,8 +576,8 @@ function getProfileSetupView() {
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Full Address</label>
                     <textarea required id="inst-address" rows="3" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all resize-none">${d.address || ''}</textarea>
                 </div>
-                <button type="submit" class="w-full bg-gradient-to-r from-primary to-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-primary/40 transform hover:-translate-y-1 transition-all mt-6 text-lg">
-                    ${isRejected ? 'Submit & Reapply <i class="fa-solid fa-rotate-right ml-2"></i>' : 'Submit Details & Request Approval <i class="fa-solid fa-paper-plane ml-2"></i>'}
+                <button type="submit" class="w-full bg-gradient-to-r from-primary to-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-primary/40 transform hover:-translate-y-1 transition-all mt-6 text-base md:text-lg flex items-center justify-center">
+                    <span>Continue to Privacy Policy & Terms</span> <i class="fa-solid fa-arrow-right ml-2"></i>
                 </button>
             </form>
         </div>
@@ -1080,6 +1309,9 @@ function getSuccessView() {
 
 
 function attachEventListeners() {
+    // Active countdown timer initialization for security lockout
+    setupLockoutCountdown();
+
     const btnEnter = document.getElementById('btn-enter-dashboard');
     if (btnEnter) {
         btnEnter.addEventListener('click', () => {
@@ -1108,6 +1340,19 @@ function attachEventListeners() {
     if (authForm) {
         authForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // Client-side lockout guard
+            if (state.authMode === 'register') {
+                const remaining = getLockoutRemainingSeconds();
+                if (remaining > 0) {
+                    const m = Math.floor(remaining / 60);
+                    const s = remaining % 60;
+                    state.errorMsg = `Security Lockout Active: Account creation is locked for ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}. Please wait.`;
+                    render();
+                    return;
+                }
+            }
+
             const email = document.getElementById('email-input').value.trim().toLowerCase();
             state.email = email;
             state.isNewUser = (state.authMode === 'register');
@@ -1128,6 +1373,15 @@ function attachEventListeners() {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 
+                // Handle 5-minute security lockout (3 failed attempts or active lock)
+                if (res.status === 429 || data.locked) {
+                    const secs = data.remaining_seconds || 300;
+                    setRegistrationLockout(secs);
+                    state.errorMsg = data.error || 'System is locked for 5 minutes due to 3 unauthorized registration attempts.';
+                    render();
+                    return;
+                }
+
                 if (!res.ok) {
                     state.errorMsg = data.error || 'Failed to send verification code.';
                     render();
@@ -1183,7 +1437,7 @@ function attachEventListeners() {
                 state.activeTab = 'profile';
                 
                 if (state.isNewUser) {
-                    navigate('policy');
+                    navigate('profileSetup');
                 } else {
                     if (data.status === 'pending') navigate('pending');
                     else navigate('dashboard');
@@ -1195,12 +1449,50 @@ function attachEventListeners() {
         });
     }
 
-    // POLICY
+    // POLICY FORM (IGYR – Privacy Policy & Terms and Conditions)
     const policyForm = document.getElementById('policy-form');
     if (policyForm) {
-        policyForm.addEventListener('submit', (e) => {
+        policyForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            navigate('profileSetup');
+
+            const checkbox = document.getElementById('policy-agree-checkbox');
+            if (checkbox && !checkbox.checked) {
+                alert('Please mark the agreement checkbox to accept the IGYR Privacy Policy & Terms and Conditions before continuing.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-submit-policy');
+            const origText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Registering Account for Approval...';
+                btn.disabled = true;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/institutes/register`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ email: state.email, instituteData: state.instituteData })
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    state.appStatus = 'pending';
+                    navigate('pending');
+                } else {
+                    alert(data.error || 'Failed to submit registration for approval.');
+                    if (btn) {
+                        btn.innerHTML = origText;
+                        btn.disabled = false;
+                    }
+                }
+            } catch (err) {
+                alert('Server error. Please ensure the backend is running.');
+                if (btn) {
+                    btn.innerHTML = origText;
+                    btn.disabled = false;
+                }
+            }
         });
     }
 
@@ -1256,7 +1548,7 @@ function attachEventListeners() {
             });
         }
 
-        profileForm.addEventListener('submit', async (e) => {
+        profileForm.addEventListener('submit', (e) => {
             e.preventDefault();
             state.instituteData.type = document.getElementById('inst-type').value;
             state.instituteData.mobile = document.getElementById('inst-mobile').value;
@@ -1264,24 +1556,8 @@ function attachEventListeners() {
             state.instituteData.district = document.getElementById('inst-district').value;
             state.instituteData.address = document.getElementById('inst-address').value;
             
-            const btn = profileForm.querySelector('button[type="submit"]');
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Submitting...';
-            btn.disabled = true;
-            
-            try {
-                const res = await fetch(`${API_BASE}/institutes/register`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email: state.email, instituteData: state.instituteData })
-                });
-                if (res.ok) {
-                    navigate('pending');
-                }
-            } catch (err) {
-                showToast('Failed to submit profile.');
-                btn.innerHTML = 'Submit Details';
-                btn.disabled = false;
-            }
+            // Proceed to Step 2: Privacy Policy & Terms and Conditions
+            navigate('policy');
         });
     }
 
