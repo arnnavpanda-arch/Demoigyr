@@ -3,3 +3,5 @@ flask-cors
 pymongo
 python-dotenv
 certifi
+reportlab<4.1
+pillow

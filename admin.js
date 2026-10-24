@@ -1,9 +1,18 @@
 let lastAdminDataHash = '';
-const API_BASE = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? 'http://127.0.0.1:5001/api' : '/api';
+const isLocal = window.location.hostname === '127.0.0.1' || 
+                window.location.hostname === 'localhost' || 
+                window.location.hostname === '0.0.0.0' || 
+                window.location.hostname.startsWith('192.168.') || 
+                window.location.hostname.startsWith('10.') || 
+                window.location.port !== '' || 
+                window.location.protocol === 'file:';
+
+const API_BASE = isLocal 
+    ? `http://${(window.location.hostname && !window.location.hostname.startsWith('192.168.') && !window.location.hostname.startsWith('10.') && window.location.hostname !== '0.0.0.0') ? window.location.hostname : '127.0.0.1'}:5001/api` 
+    : '/api';
 
 async function loadApplication() {
     const pendingContainer = document.getElementById('application-container');
-    
     const postContainer = document.getElementById('post-payment-container');
     const paymentsListContainer = document.getElementById('payments-list-container');
     const registeredContainer = document.getElementById('registered-container');
@@ -12,12 +21,15 @@ async function loadApplication() {
     
     try {
         const res = await fetch(`${API_BASE}/admin/institutes?t=${Date.now()}`);
-        const institutes = await res.json();
+        if (!res.ok) {
+            throw new Error(`Failed to fetch institutes: HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        const institutes = Array.isArray(data) ? data : [];
         
         // Auto-refresh logic (only re-render if data actually changed)
         const currentHash = JSON.stringify(institutes);
         if (lastAdminDataHash === currentHash) return; // No changes, do not flicker UI
-        lastAdminDataHash = currentHash;
         
         let pendingHtml = '';
         let postHtml = '';
@@ -225,32 +237,72 @@ async function loadApplication() {
 
         });
         
-        if (typeof morphdom !== 'undefined') {
-            const wrap = (html, node) => `<${node.tagName.toLowerCase()} id="${node.id}" class="${node.className}">${html}</${node.tagName.toLowerCase()}>`;
-            
-            morphdom(pendingContainer, wrap(pendingHtml, pendingContainer));
-            morphdom(postContainer, wrap(postHtml, postContainer));
-            if (registeredContainer) morphdom(registeredContainer, wrap(registeredHtml, registeredContainer));
-            if (paymentsListContainer) morphdom(paymentsListContainer, wrap(paymentsListHtml, paymentsListContainer));
-        } else {
-            pendingContainer.innerHTML = pendingHtml;
-            postContainer.innerHTML = postHtml;
-            if (registeredContainer) registeredContainer.innerHTML = registeredHtml;
-            if (paymentsListContainer) paymentsListContainer.innerHTML = paymentsListHtml;
+        // Empty state fallbacks if collections have no active records
+        if (!pendingHtml) {
+            pendingHtml = `
+                <div class="col-span-full text-center text-gray-400 py-12 bg-white rounded-xl border border-dashed border-gray-200">
+                    <i class="fa-solid fa-user-check text-3xl mb-2 text-emerald-500"></i>
+                    <p class="text-sm font-bold text-gray-700">No New Registrations Pending Review</p>
+                    <p class="text-xs text-gray-400 mt-1">All registered institutes have been processed.</p>
+                </div>
+            `;
+        }
+        
+        if (!postHtml) {
+            postHtml = `
+                <div class="col-span-full text-center text-gray-400 py-16 bg-white rounded-2xl border border-dashed border-gray-200">
+                    <i class="fa-solid fa-boxes-stacked text-4xl mb-3 text-blue-300"></i>
+                    <p class="text-base font-bold text-gray-700">No Active Orders in Pipeline</p>
+                    <p class="text-xs text-gray-400 mt-1">When institutes submit results to publish, their order pipeline will appear here.</p>
+                </div>
+            `;
+        }
+        
+        if (!registeredHtml) {
+            registeredHtml = `
+                <div class="col-span-full text-center text-gray-400 py-12 bg-white rounded-xl border border-dashed border-gray-200">
+                    <i class="fa-solid fa-building-columns text-3xl mb-2 text-gray-300"></i>
+                    <p class="text-sm font-bold text-gray-700">No Registered Institutes Found</p>
+                </div>
+            `;
+        }
+        
+        if (!paymentsListHtml) {
+            paymentsListHtml = `
+                <tr>
+                    <td colspan="4" class="p-8 text-center text-gray-400 text-xs">
+                        No active institute ledgers found.
+                    </td>
+                </tr>
+            `;
+        }
+
+        // Direct and reliable DOM updates
+        pendingContainer.innerHTML = pendingHtml;
+        postContainer.innerHTML = postHtml;
+        if (registeredContainer) {
+            registeredContainer.innerHTML = registeredHtml;
+        }
+        if (paymentsListContainer) {
+            paymentsListContainer.innerHTML = paymentsListHtml;
         }
         
         if (typeof renderPublishList === 'function') {
             renderPublishList(publishInstitutes);
         }
+
+        // Successfully updated DOM, commit current hash
+        lastAdminDataHash = currentHash;
+
     } catch (e) {
-        console.error(e);
+        console.error("loadApplication error:", e);
         const errHtml = `<div class="col-span-full text-center text-red-500 py-12 border border-red-200 bg-red-50 rounded-xl"><i class="fa-solid fa-triangle-exclamation text-4xl mb-4"></i><p class="text-lg font-bold">Failed to load data</p><p class="text-sm mt-2 text-red-400 text-left bg-white p-4 overflow-x-auto mx-4 border rounded">${e.stack || e.message || e}</p></div>`;
         if (pendingContainer) pendingContainer.innerHTML = errHtml;
         if (postContainer) postContainer.innerHTML = errHtml;
         const regCont = document.getElementById("registered-container");
         if (regCont) regCont.innerHTML = errHtml;
         const payCont = document.getElementById("payments-list-container");
-        if (payCont) payCont.innerHTML = errHtml;
+        if (payCont) payCont.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500 text-xs">Failed to load ledger</td></tr>`;
     }}
 
 async function updateStatus(email, newStatus) {
@@ -284,8 +336,6 @@ async function markTaskDone(email) {
         loadApplication();
     } catch(e) { showToast('Action failed'); }
 }
-
-document.addEventListener('DOMContentLoaded', loadApplication);
 
 async function approveFormat(email) {
     await fetch(`${API_BASE}/admin/approve-format`, {
@@ -330,51 +380,143 @@ async function sendVerification(email) {
     loadApplication();
 }
 
-async function loadPricing() {
-    try {
-        const res = await fetch(`${API_BASE}/pricing`);
-        const p = await res.json();
-        const elNorm = document.getElementById('price-normal');
-        if (elNorm) {
-            elNorm.value = p.normal;
-            document.getElementById('price-excel').value = p.excel;
-            document.getElementById('price-both').value = p.both;
-            document.getElementById('price-subject').value = p.subject_rate || 0;
-            document.getElementById('bank-account').value = p.bank_account || '';
-            document.getElementById('bank-ifsc').value = p.ifsc || '';
-            document.getElementById('bank-phone').value = p.phone || '';
-            if (document.getElementById('config-message')) document.getElementById('config-message').value = p.message || '';
-        }
-    } catch(e) {}
+let currentFormats = [];
+
+window.addNewFormat = function() {
+    const nameInput = document.getElementById('new-format-name');
+    const rateInput = document.getElementById('new-format-rate');
+    const name = nameInput ? nameInput.value.trim() : '';
+    const rateVal = rateInput ? rateInput.value.trim() : '';
+    
+    if (!name) {
+        showToast('Please enter a format name');
+        if (nameInput) nameInput.focus();
+        return;
+    }
+    const rate = Number(rateVal);
+    if (isNaN(rate) || rate < 0 || rateVal === '') {
+        showToast('Please enter a valid rate');
+        if (rateInput) rateInput.focus();
+        return;
+    }
+    
+    currentFormats.push({ name: name, rate: rate });
+    if (nameInput) nameInput.value = '';
+    if (rateInput) rateInput.value = '';
+    renderAdminFormatsList();
+    showToast(`Added "${name}". Click "Save Changes" to apply.`);
+};
+
+window.removeFormat = function(index) {
+    if (index >= 0 && index < currentFormats.length) {
+        const removed = currentFormats.splice(index, 1);
+        renderAdminFormatsList();
+        showToast(`Removed "${removed[0]?.name}". Click "Save Changes" to apply.`);
+    }
+};
+
+window.updateFormatName = function(index, val) {
+    if (currentFormats[index]) {
+        currentFormats[index].name = val.trim();
+    }
+};
+
+window.updateFormatRate = function(index, val) {
+    if (currentFormats[index]) {
+        currentFormats[index].rate = Number(val) || 0;
+    }
+};
+
+function renderAdminFormatsList() {
+    const container = document.getElementById('formats-list-container');
+    if (!container) return;
+    
+    if (!currentFormats || currentFormats.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
+                <i class="fa-solid fa-layer-group text-2xl mb-2 text-gray-300"></i>
+                <p>No custom formats added yet. Add your first format above!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = currentFormats.map((fmt, idx) => `
+        <div class="flex items-center justify-between gap-3 bg-white border border-gray-200 hover:border-gray-300 p-3 rounded-xl shadow-sm transition-all">
+            <div class="flex items-center gap-3 flex-1 min-w-0">
+                <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    ${idx + 1}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <input type="text" value="${fmt.name}" onchange="updateFormatName(${idx}, this.value)" class="w-full font-bold text-gray-800 text-sm bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:bg-white px-2 py-1 rounded outline-none transition-all" placeholder="Format Name" />
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <div class="relative w-28">
+                    <span class="absolute left-3 top-2 text-gray-400 font-bold text-xs">₹</span>
+                    <input type="number" min="0" value="${fmt.rate}" onchange="updateFormatRate(${idx}, this.value)" class="w-full pl-7 pr-2 py-1.5 text-sm font-bold text-green-700 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 focus:border-blue-500 rounded-lg outline-none transition-all" placeholder="Rate" />
+                </div>
+                <span class="text-xs text-gray-400 font-medium">/stu</span>
+                <button type="button" onclick="removeFormat(${idx})" class="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors ml-1" title="Delete format">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadPricing();
+async function loadPricing() {
+    try {
+        const res = await fetch(`${API_BASE}/pricing?t=${Date.now()}`);
+        if (!res.ok) return;
+        const p = await res.json();
+        
+        currentFormats = (p.formats && p.formats.length > 0) ? p.formats : [
+            { name: "Normal Tabulation", rate: p.normal || 50 },
+            { name: "Excel Sheet", rate: p.excel || 100 },
+            { name: "Admit card + Any type of Tabulation", rate: p.both || 150 }
+        ];
+        renderAdminFormatsList();
+        
+        if (document.getElementById('price-subject')) document.getElementById('price-subject').value = p.subject_rate || 0;
+        if (document.getElementById('bank-account')) document.getElementById('bank-account').value = p.bank_account || '';
+        if (document.getElementById('bank-ifsc')) document.getElementById('bank-ifsc').value = p.ifsc || '';
+        if (document.getElementById('bank-phone')) document.getElementById('bank-phone').value = p.phone || '';
+        if (document.getElementById('config-message')) document.getElementById('config-message').value = p.message || '';
+    } catch(e) {
+        console.error("loadPricing error:", e);
+    }
+}
+
+function initPricingForm() {
     const pricingForm = document.getElementById('pricing-form');
-    if (pricingForm) {
+    if (pricingForm && !pricingForm.dataset.initialized) {
+        pricingForm.dataset.initialized = 'true';
         pricingForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const p = {
-                normal: document.getElementById('price-normal').value,
-                excel: document.getElementById('price-excel').value,
-                both: document.getElementById('price-both').value,
-                subject_rate: document.getElementById('price-subject').value,
-                bank_account: document.getElementById('bank-account').value,
-                ifsc: document.getElementById('bank-ifsc').value,
-                phone: document.getElementById('bank-phone').value,
+                formats: currentFormats,
+                subject_rate: document.getElementById('price-subject') ? document.getElementById('price-subject').value : 0,
+                bank_account: document.getElementById('bank-account') ? document.getElementById('bank-account').value : '',
+                ifsc: document.getElementById('bank-ifsc') ? document.getElementById('bank-ifsc').value : '',
+                phone: document.getElementById('bank-phone') ? document.getElementById('bank-phone').value : '',
                 message: document.getElementById('config-message') ? document.getElementById('config-message').value : ''
             };
             try {
-                await fetch(`${API_BASE}/admin/pricing`, {
+                const res = await fetch(`${API_BASE}/admin/pricing`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(p)
                 });
-                showToast('Rate Card Updated for Clients!');
+                if (res.ok) {
+                    showToast('Rate Card & Custom Formats Updated!');
+                } else {
+                    showToast('Failed to update pricing');
+                }
             } catch(e) { showToast('Failed to update'); }
         });
     }
-});
+}
 
 async function sendVerificationWithFile(email) {
     const fileInput = document.getElementById(`file-${email}`);
@@ -677,11 +819,777 @@ window.confirmAction = function(message) {
     });
 }
 
+// Unified initialization for all admin modules
+function initAdmin() {
+    loadApplication();
+    loadPricing();
+    if (typeof initPricingForm === 'function') initPricingForm();
+    if (typeof refreshEmailCentre === 'function') refreshEmailCentre();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdmin);
+} else {
+    initAdmin();
+}
+
 // Auto-poll for live real-time updates across multiple devices
 setInterval(loadApplication, 3000);
-loadApplication();
 
 window.rejectRegistration = async function(email) {
     if (!(await confirmAction('Are you sure you want to REJECT this registration? They will receive a rejection email.'))) return;
     updateStatus(email, 'rejected');
+};
+
+// ==========================================
+// EMAIL CENTRE MODULE - JAVASCRIPT LOGIC
+// ==========================================
+
+let emailCentreInstitutes = [];
+let cachedEmailLogs = [];
+let cachedOfferLetters = [];
+
+window.switchEmailMode = function(modeId) {
+    document.querySelectorAll('.ec-mode-tab').forEach(b => {
+        b.classList.remove('active', 'bg-white', 'shadow-sm', 'text-gray-900');
+        b.classList.add('text-gray-600');
+    });
+    
+    const activeBtn = document.getElementById('btn-' + modeId);
+    if (activeBtn) {
+        activeBtn.classList.add('active', 'bg-white', 'shadow-sm', 'text-gray-900');
+        activeBtn.classList.remove('text-gray-600');
+    }
+    
+    document.querySelectorAll('.ec-panel').forEach(p => p.classList.add('hidden'));
+    const activePanel = document.getElementById('panel-' + modeId);
+    if (activePanel) activePanel.classList.remove('hidden');
+    
+    if (modeId === 'history') {
+        if (typeof loadEmailHistory === 'function') loadEmailHistory();
+        if (typeof loadOfferLettersArchive === 'function') loadOfferLettersArchive();
+    }
+};
+
+function formatPlainTextForDisplay(text) {
+    if (!text) return "";
+    if (text.includes("<p") || text.includes("<div") || text.includes("<br")) return text;
+    const paras = text.trim().split("\n\n");
+    return paras.map(p => `<p style="margin: 0 0 14px 0; line-height: 1.6;">${p.replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+window.refreshEmailCentre = async function() {
+    try {
+        // 1. Fetch live stats
+        const resStats = await fetch(`${API_BASE}/admin/email-centre/stats?t=${Date.now()}`);
+        if (resStats.ok) {
+            const stats = await resStats.json();
+            const elInst = document.getElementById('ec-stat-institutes');
+            const elSent = document.getElementById('ec-stat-sent');
+            const elDel = document.getElementById('ec-stat-delivered');
+            const elFail = document.getElementById('ec-stat-failed');
+            
+            if (elInst) elInst.textContent = stats.total_institutes || 0;
+            if (elSent) elSent.textContent = stats.total_sent || 0;
+            if (elDel) elDel.textContent = stats.delivered || 0;
+            if (elFail) elFail.textContent = stats.failed || 0;
+        }
+
+        // 2. Fetch all registered institutes directly from the database
+        const resInst = await fetch(`${API_BASE}/admin/institutes?t=${Date.now()}`);
+        if (resInst.ok) {
+            const allInst = await resInst.json();
+            window.allInstitutesData = allInst;
+            emailCentreInstitutes = allInst.filter(i => i.status !== 'removed' && i.email);
+        }
+    } catch(e) {
+        console.error("refreshEmailCentre error:", e);
+    }
+    
+    const countAllEl = document.getElementById('m1-count-all');
+    if (countAllEl) countAllEl.textContent = emailCentreInstitutes.length;
+    
+    renderM1InstitutesList();
+    renderM3InstitutesList();
+    if (typeof loadEmailHistory === 'function') loadEmailHistory();
+    if (typeof loadOfferLettersArchive === 'function') loadOfferLettersArchive();
+    
+    // Set today as default issue date for offer letter
+    const issueDateInput = document.getElementById('ol-emp-issue-date');
+    if (issueDateInput && !issueDateInput.value) {
+        issueDateInput.value = new Date().toISOString().split('T')[0];
+    }
+};
+
+// ------------------------------------------
+// MODE 1: SEND TO INSTITUTES
+// ------------------------------------------
+window.toggleM1RecipientPicker = function() {
+    const isAll = document.querySelector('input[name="m1-target-type"]:checked')?.value === 'all';
+    selectAllM1(isAll);
+    updateM1Summary();
+};
+
+window.renderM1InstitutesList = function() {
+    const list = document.getElementById('m1-institutes-list');
+    if (!list) return;
+    
+    if (!emailCentreInstitutes || emailCentreInstitutes.length === 0) {
+        list.innerHTML = `<div class="p-4 text-center text-gray-400 text-xs">No registered institutes found in database</div>`;
+        return;
+    }
+
+    const isAll = document.querySelector('input[name="m1-target-type"]:checked')?.value === 'all';
+    
+    list.innerHTML = emailCentreInstitutes.map((inst, idx) => `
+        <label class="m1-inst-item flex items-center justify-between p-2.5 hover:bg-blue-50/50 rounded-lg cursor-pointer transition-colors text-xs" data-search="${(inst.institute?.name || '').toLowerCase()} ${inst.email.toLowerCase()} ${(inst.institute?.district || '').toLowerCase()} ${(inst.institute?.state || '').toLowerCase()}">
+            <div class="flex items-center gap-3 min-w-0">
+                <input type="checkbox" value="${inst.email}" ${isAll ? 'checked' : ''} onchange="updateM1Summary()" class="m1-inst-cb w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                <div class="truncate">
+                    <span class="font-bold text-gray-800 block text-sm truncate">${inst.institute?.name || 'Unknown Institute'}</span>
+                    <span class="text-gray-500 text-[11px] font-mono">${inst.email}</span>
+                    <span class="text-gray-400 text-[11px] ml-2">• ${inst.institute?.mobile || 'No phone'} • ${inst.institute?.district || 'N/A'}, ${inst.institute?.state || 'N/A'}</span>
+                </div>
+            </div>
+            <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold whitespace-nowrap ml-2">${inst.institute?.type || 'Institute'}</span>
+        </label>
+    `).join('');
+    
+    updateM1Summary();
+};
+
+window.filterM1Institutes = function() {
+    const q = (document.getElementById('m1-search-input')?.value || '').toLowerCase().trim();
+    document.querySelectorAll('.m1-inst-item').forEach(el => {
+        const text = el.getAttribute('data-search') || '';
+        el.style.display = text.includes(q) ? 'flex' : 'none';
+    });
+};
+
+window.selectAllM1 = function(check) {
+    document.querySelectorAll('.m1-inst-cb').forEach(cb => {
+        if (cb.closest('.m1-inst-item').style.display !== 'none') {
+            cb.checked = check;
+        }
+    });
+    updateM1Summary();
+};
+
+window.updateM1Summary = function() {
+    const isSelected = document.querySelector('input[name="m1-target-type"]:checked')?.value === 'selected';
+    const checkedCount = document.querySelectorAll('.m1-inst-cb:checked').length;
+    
+    const badge = document.getElementById('m1-selected-badge');
+    if (badge) badge.textContent = `${checkedCount} Selected`;
+    
+    const summary = document.getElementById('m1-summary-text');
+    if (summary) {
+        if (isSelected) {
+            summary.textContent = `Target: ${checkedCount} selected institute(s)`;
+        } else {
+            summary.textContent = `Target: All ${emailCentreInstitutes.length} registered institute(s)`;
+        }
+    }
+};
+
+window.previewM1Email = function() {
+    const subject = document.getElementById('m1-subject')?.value.trim() || 'Official Announcement';
+    const message = document.getElementById('m1-message')?.value.trim() || '<p>Type your message...</p>';
+    const showLogo = document.getElementById('m1-logo-toggle')?.checked;
+    const showSig = document.getElementById('m1-sig-toggle')?.checked;
+    
+    const sampleInstitute = emailCentreInstitutes[0] || { name: "Sample University", email: "registrar@university.ac.in" };
+    const sampleName = sampleInstitute.institute?.name || sampleInstitute.name || "Sample University";
+    const sampleEmail = sampleInstitute.email;
+    
+    const renderedBody = formatPlainTextForDisplay(message.replace(/{{institute_name}}/g, sampleName).replace(/{{email}}/g, sampleEmail));
+    
+    openEmailPreview(
+        sampleEmail,
+        subject.replace(/{{institute_name}}/g, sampleName),
+        renderedBody,
+        showLogo,
+        showSig ? '<strong>IGYR Super Admin Team</strong><br>Academic Verification & Processing Hub' : null
+    );
+};
+
+window.sendM1Email = async function() {
+    const isSelected = document.querySelector('input[name="m1-target-type"]:checked')?.value === 'selected';
+    const subject = document.getElementById('m1-subject')?.value.trim();
+    const message = document.getElementById('m1-message')?.value.trim();
+    const showLogo = document.getElementById('m1-logo-toggle')?.checked;
+    const showSig = document.getElementById('m1-sig-toggle')?.checked;
+    const attachmentInput = document.getElementById('m1-attachment');
+    
+    if (!subject) {
+        showToast("Please enter an email subject");
+        document.getElementById('m1-subject')?.focus();
+        return;
+    }
+    if (!message) {
+        showToast("Please enter the email message body");
+        document.getElementById('m1-message')?.focus();
+        return;
+    }
+    
+    let selectedEmails = [];
+    if (isSelected) {
+        document.querySelectorAll('.m1-inst-cb:checked').forEach(cb => selectedEmails.push(cb.value));
+        if (selectedEmails.length === 0) {
+            showToast("Please select at least one recipient institute");
+            return;
+        }
+    }
+    
+    const count = isSelected ? selectedEmails.length : emailCentreInstitutes.length;
+    const confirmMsg = `Are you sure you want to dispatch this email announcement to ${count} institute(s)?`;
+    if (!(await confirmAction(confirmMsg))) return;
+    
+    const btn = document.getElementById('btn-send-m1');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Sending to ${count} institutes...`;
+    
+    try {
+        const formData = new FormData();
+        formData.append('recipients_type', isSelected ? 'selected' : 'all');
+        if (isSelected) formData.append('selected_emails', selectedEmails.join(','));
+        formData.append('subject', subject);
+        formData.append('message', message);
+        formData.append('show_logo', showLogo ? 'true' : 'false');
+        if (showSig) formData.append('signature', '<strong>IGYR Super Admin Team</strong><br>Academic Result Processing & Publication Hub');
+        
+        if (attachmentInput && attachmentInput.files.length > 0) {
+            formData.append('attachment', attachmentInput.files[0]);
+        }
+        
+        const res = await fetch(`${API_BASE}/admin/email-centre/send-institutes`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            showToast(`Success! ${data.sent} sent, ${data.failed} failed`);
+            document.getElementById('m1-subject').value = '';
+            document.getElementById('m1-message').value = '';
+            if (attachmentInput) attachmentInput.value = '';
+            refreshEmailCentre();
+        } else {
+            showToast(data.error || "Failed to dispatch emails");
+        }
+    } catch(err) {
+        console.error("sendM1Email error:", err);
+        showToast("Network error during email dispatch");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+};
+
+// ------------------------------------------
+// MODE 2: EMPLOYEE OFFER LETTER
+// ------------------------------------------
+window.updateTemplateSelection = function() {
+    const val = document.querySelector('input[name="ol-template"]:checked')?.value || 'corporate';
+    ['corporate', 'modern', 'technical'].forEach(t => {
+        const card = document.getElementById('tpl-card-' + t);
+        if (card) {
+            if (t === val) {
+                card.classList.remove('border-gray-200', 'bg-white');
+                card.classList.add('border-indigo-600', 'bg-indigo-50/50', 'shadow-sm');
+            } else {
+                card.classList.remove('border-indigo-600', 'bg-indigo-50/50', 'shadow-sm');
+                card.classList.add('border-gray-200', 'bg-white');
+            }
+        }
+    });
+};
+
+function getOfferLetterFormData() {
+    return {
+        employee_name: document.getElementById('ol-emp-name')?.value.trim() || '',
+        employee_email: document.getElementById('ol-emp-email')?.value.trim() || '',
+        employee_phone: document.getElementById('ol-emp-phone')?.value.trim() || '',
+        position: document.getElementById('ol-emp-position')?.value.trim() || '',
+        department: document.getElementById('ol-emp-dept')?.value.trim() || 'Operations & Verification',
+        company_name: document.getElementById('ol-company-name')?.value.trim() || 'IGYR - India Get Your Result',
+        location: document.getElementById('ol-emp-location')?.value.trim() || 'Remote / Head Office',
+        joining_date: document.getElementById('ol-emp-joining')?.value || '',
+        issue_date: document.getElementById('ol-emp-issue-date')?.value || new Date().toISOString().split('T')[0],
+        salary: document.getElementById('ol-emp-salary')?.value.trim() || '',
+        employment_type: document.getElementById('ol-emp-type')?.value || 'Full-time',
+        reporting_manager: document.getElementById('ol-emp-manager')?.value.trim() || '',
+        deadline: document.getElementById('ol-emp-deadline')?.value || '',
+        signatory_name: document.getElementById('ol-sig-name')?.value.trim() || 'Arnav Panda',
+        signatory_designation: document.getElementById('ol-sig-desig')?.value.trim() || 'Director of Operations',
+        terms: document.getElementById('ol-emp-terms')?.value.trim() || '',
+        template: document.querySelector('input[name="ol-template"]:checked')?.value || 'corporate',
+        custom_email_body: document.getElementById('ol-custom-email')?.value.trim() || ''
+    };
+}
+
+window.previewOfferLetterPDF = async function() {
+    const details = getOfferLetterFormData();
+    if (!details.employee_name) {
+        showToast("Please enter Employee Full Name");
+        document.getElementById('ol-emp-name')?.focus();
+        return;
+    }
+    if (!details.position) {
+        showToast("Please enter Offered Job Position");
+        document.getElementById('ol-emp-position')?.focus();
+        return;
+    }
+    
+    showToast("Generating PDF Preview...");
+    try {
+        const res = await fetch(`${API_BASE}/admin/email-centre/preview-offer-pdf`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(details)
+        });
+        
+        if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            window.open(blobUrl, '_blank');
+        } else {
+            const err = await res.json();
+            showToast(err.error || "Failed to generate PDF preview");
+        }
+    } catch(e) {
+        console.error("previewOfferLetterPDF error:", e);
+        showToast("Failed to preview PDF");
+    }
+};
+
+window.sendOfferLetter = async function() {
+    const details = getOfferLetterFormData();
+    
+    if (!details.employee_name) {
+        showToast("Employee Full Name is required");
+        document.getElementById('ol-emp-name')?.focus();
+        return;
+    }
+    if (!details.employee_email) {
+        showToast("Employee Email Address is required");
+        document.getElementById('ol-emp-email')?.focus();
+        return;
+    }
+    if (!details.position) {
+        showToast("Offered Job Position is required");
+        document.getElementById('ol-emp-position')?.focus();
+        return;
+    }
+    
+    const confirmMsg = `Send official Offer Letter for "${details.position}" to ${details.employee_name} (${details.employee_email})? A customized PDF will be automatically attached.`;
+    if (!(await confirmAction(confirmMsg))) return;
+    
+    const btn = document.getElementById('btn-send-offer');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Generating PDF & Sending Email...`;
+    
+    try {
+        const res = await fetch(`${API_BASE}/admin/email-centre/send-offer-letter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(details)
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            showToast(`Offer letter sent to ${details.employee_email}!`);
+            refreshEmailCentre();
+        } else {
+            showToast(data.error || "Failed to send offer letter");
+        }
+    } catch(err) {
+        console.error("sendOfferLetter error:", err);
+        showToast("Network error while sending offer letter");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+};
+
+// ------------------------------------------
+// MODE 3: SEPARATE MESSAGE TO INSTITUTES
+// ------------------------------------------
+window.renderM3InstitutesList = function() {
+    const list = document.getElementById('m3-institutes-list');
+    if (!list) return;
+    
+    if (!emailCentreInstitutes || emailCentreInstitutes.length === 0) {
+        list.innerHTML = `<div class="p-4 text-center text-gray-400 text-xs">No registered institutes found in database</div>`;
+        return;
+    }
+    
+    list.innerHTML = emailCentreInstitutes.map((inst, idx) => `
+        <label class="m3-inst-item flex items-center justify-between p-2.5 hover:bg-teal-50/50 rounded-lg cursor-pointer transition-colors text-xs" data-search="${(inst.institute?.name || '').toLowerCase()} ${inst.email.toLowerCase()} ${(inst.institute?.district || '').toLowerCase()} ${(inst.institute?.state || '').toLowerCase()}">
+            <div class="flex items-center gap-3 min-w-0">
+                <input type="checkbox" value="${inst.email}" data-name="${inst.institute?.name || 'Institute Partner'}" data-state="${inst.institute?.state || ''}" data-district="${inst.institute?.district || ''}" onchange="updateM3Summary()" class="m3-inst-cb w-4 h-4 text-teal-600 rounded focus:ring-teal-500">
+                <div class="truncate">
+                    <span class="font-bold text-gray-800 block text-sm truncate">${inst.institute?.name || 'Unknown Institute'}</span>
+                    <span class="text-gray-500 text-[11px] font-mono">${inst.email}</span>
+                    <span class="text-gray-400 text-[11px] ml-2">• ${inst.institute?.mobile || 'No phone'} • ${inst.institute?.district || 'N/A'}, ${inst.institute?.state || 'N/A'}</span>
+                </div>
+            </div>
+            <span class="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded font-bold whitespace-nowrap ml-2">${inst.institute?.type || 'Institute'}</span>
+        </label>
+    `).join('');
+    
+    updateM3Summary();
+};
+
+window.filterM3Institutes = function() {
+    const q = (document.getElementById('m3-search-input')?.value || '').toLowerCase().trim();
+    document.querySelectorAll('.m3-inst-item').forEach(el => {
+        const text = el.getAttribute('data-search') || '';
+        el.style.display = text.includes(q) ? 'flex' : 'none';
+    });
+};
+
+window.selectAllM3 = function(check) {
+    document.querySelectorAll('.m3-inst-cb').forEach(cb => {
+        if (cb.closest('.m3-inst-item').style.display !== 'none') {
+            cb.checked = check;
+        }
+    });
+    updateM3Summary();
+};
+
+window.updateM3Summary = function() {
+    const checkedCount = document.querySelectorAll('.m3-inst-cb:checked').length;
+    const badge = document.getElementById('m3-selected-badge');
+    if (badge) badge.textContent = `${checkedCount} Selected`;
+};
+
+window.previewM3Email = function() {
+    const checked = document.querySelectorAll('.m3-inst-cb:checked');
+    let sample = { name: "Sample College", email: "contact@college.edu", state: "Maharashtra", district: "Pune" };
+    if (checked.length > 0) {
+        sample.email = checked[0].value;
+        sample.name = checked[0].getAttribute('data-name') || sample.name;
+        sample.state = checked[0].getAttribute('data-state') || sample.state;
+        sample.district = checked[0].getAttribute('data-district') || sample.district;
+    }
+    
+    let subject = document.getElementById('m3-subject')?.value.trim() || 'Notice for {{institute_name}}';
+    let message = document.getElementById('m3-message')?.value.trim() || 'Dear {{institute_name}},
+
+This is a customized message.';
+    
+    subject = subject.replace(/{{institute_name}}/g, sample.name).replace(/{{email}}/g, sample.email).replace(/{{state}}/g, sample.state).replace(/{{district}}/g, sample.district);
+    message = message.replace(/{{institute_name}}/g, sample.name).replace(/{{email}}/g, sample.email).replace(/{{state}}/g, sample.state).replace(/{{district}}/g, sample.district);
+    
+    const showLogo = document.getElementById('m3-logo-toggle')?.checked;
+    const showSig = document.getElementById('m3-sig-toggle')?.checked;
+    
+    openEmailPreview(
+        sample.email,
+        subject,
+        formatPlainTextForDisplay(message),
+        showLogo,
+        showSig ? '<strong>IGYR Super Admin Team</strong><br>Direct Educational Liaison' : null
+    );
+};
+
+window.sendM3Email = async function() {
+    const checkedCbs = document.querySelectorAll('.m3-inst-cb:checked');
+    if (checkedCbs.length === 0) {
+        showToast("Please select at least one recipient institute");
+        return;
+    }
+    
+    const subject = document.getElementById('m3-subject')?.value.trim();
+    const message = document.getElementById('m3-message')?.value.trim();
+    const showLogo = document.getElementById('m3-logo-toggle')?.checked;
+    const showSig = document.getElementById('m3-sig-toggle')?.checked;
+    const attachmentInput = document.getElementById('m3-attachment');
+    
+    if (!subject) {
+        showToast("Please enter an email subject");
+        document.getElementById('m3-subject')?.focus();
+        return;
+    }
+    if (!message) {
+        showToast("Please enter the customized message body");
+        document.getElementById('m3-message')?.focus();
+        return;
+    }
+    
+    const recipients = [];
+    checkedCbs.forEach(cb => {
+        recipients.push({
+            email: cb.value,
+            name: cb.getAttribute('data-name') || 'Institute Partner',
+            state: cb.getAttribute('data-state') || '',
+            district: cb.getAttribute('data-district') || ''
+        });
+    });
+    
+    const confirmMsg = `Send customized separate messages to ${recipients.length} institute(s)? Each institute will receive their personalized copy.`;
+    if (!(await confirmAction(confirmMsg))) return;
+    
+    const btn = document.getElementById('btn-send-m3');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Sending to ${recipients.length} institutes...`;
+    
+    try {
+        const formData = new FormData();
+        formData.append('type', 'template');
+        formData.append('recipients', JSON.stringify(recipients));
+        formData.append('subject', subject);
+        formData.append('message', message);
+        formData.append('show_logo', showLogo ? 'true' : 'false');
+        if (showSig) formData.append('signature', '<strong>IGYR Super Admin Team</strong><br>Educational Liaison Division');
+        
+        if (attachmentInput && attachmentInput.files.length > 0) {
+            formData.append('attachment', attachmentInput.files[0]);
+        }
+        
+        const res = await fetch(`${API_BASE}/admin/email-centre/send-custom-institutes`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            showToast(`Custom emails sent: ${data.sent} delivered, ${data.failed} failed`);
+            document.getElementById('m3-subject').value = '';
+            document.getElementById('m3-message').value = '';
+            if (attachmentInput) attachmentInput.value = '';
+            refreshEmailCentre();
+        } else {
+            showToast(data.error || "Failed to dispatch custom emails");
+        }
+    } catch(err) {
+        console.error("sendM3Email error:", err);
+        showToast("Network error during custom dispatch");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+};
+
+// ------------------------------------------
+// MODE 4: HISTORY & AUDIT LOGS
+// ------------------------------------------
+window.switchHistorySubTab = function(subTab) {
+    const btnLogs = document.getElementById('btn-hist-logs');
+    const btnOffers = document.getElementById('btn-hist-offers');
+    const viewLogs = document.getElementById('subview-all-logs');
+    const viewOffers = document.getElementById('subview-offer-archive');
+    
+    if (subTab === 'all-logs') {
+        btnLogs.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white";
+        btnOffers.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200";
+        viewLogs.classList.remove('hidden');
+        viewOffers.classList.add('hidden');
+        loadEmailHistory();
+    } else {
+        btnOffers.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white";
+        btnLogs.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200";
+        viewOffers.classList.remove('hidden');
+        viewLogs.classList.add('hidden');
+        loadOfferLettersArchive();
+    }
+};
+
+window.loadEmailHistory = async function() {
+    const tbody = document.getElementById('ec-history-tbody');
+    if (!tbody) return;
+    
+    const mode = document.getElementById('hist-mode-filter')?.value || 'all';
+    const status = document.getElementById('hist-status-filter')?.value || 'all';
+    const search = document.getElementById('hist-search')?.value.trim() || '';
+    
+    try {
+        const queryParams = new URLSearchParams({ mode, status, search, limit: '100', t: Date.now() });
+        const res = await fetch(`${API_BASE}/admin/email-centre/history?${queryParams}`);
+        if (res.ok) {
+            const data = await res.json();
+            cachedEmailLogs = data.logs || [];
+            renderHistoryTable(cachedEmailLogs);
+        } else {
+            tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500">Failed to load dispatch history</td></tr>`;
+        }
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500">Error connecting to history server</td></tr>`;
+    }
+};
+
+function renderHistoryTable(logs) {
+    const tbody = document.getElementById('ec-history-tbody');
+    if (!tbody) return;
+    
+    if (!logs || logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-gray-400">No email records match the selected criteria</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = logs.map(log => {
+        const isDelivered = log.status === 'Delivered';
+        const statusBadge = isDelivered 
+            ? `<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center"><i class="fa-solid fa-check mr-1"></i> Delivered</span>`
+            : `<span class="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center" title="${log.failure_reason || 'Delivery failed'}"><i class="fa-solid fa-xmark mr-1"></i> Failed</span>`;
+            
+        let modeColor = 'bg-blue-50 text-blue-700';
+        if (log.mode === 'Employee Offer Letter') modeColor = 'bg-indigo-50 text-indigo-700';
+        else if (log.mode === 'Custom Institute Message') modeColor = 'bg-teal-50 text-teal-700';
+        
+        return `
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="p-3 text-gray-500 font-mono text-[11px] whitespace-nowrap">${log.timestamp || 'N/A'}</td>
+                <td class="p-3"><span class="${modeColor} px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">${log.mode}</span></td>
+                <td class="p-3">
+                    <span class="font-bold text-gray-800 block">${log.recipient_name}</span>
+                    <span class="text-gray-400 text-[11px] font-mono">${log.recipient_email}</span>
+                </td>
+                <td class="p-3 font-medium text-gray-700 max-w-xs truncate">${log.subject}</td>
+                <td class="p-3">${statusBadge}</td>
+                <td class="p-3 text-right">
+                    ${log.offer_letter_id ? `
+                        <a href="${API_BASE}/admin/email-centre/download-offer-pdf/${log.offer_letter_id}" target="_blank" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded text-[11px] font-bold inline-flex items-center">
+                            <i class="fa-solid fa-download mr-1"></i> PDF
+                        </a>
+                    ` : `
+                        <button onclick="viewHistoryDetails('${log.id}')" class="text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded text-[11px] font-bold">
+                            View
+                        </button>
+                    `}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+window.filterHistoryLogs = function() {
+    const q = (document.getElementById('hist-search')?.value || '').toLowerCase().trim();
+    if (!q) {
+        renderHistoryTable(cachedEmailLogs);
+        return;
+    }
+    const filtered = cachedEmailLogs.filter(l => 
+        (l.recipient_name || '').toLowerCase().includes(q) ||
+        (l.recipient_email || '').toLowerCase().includes(q) ||
+        (l.subject || '').toLowerCase().includes(q)
+    );
+    renderHistoryTable(filtered);
+};
+
+window.loadOfferLettersArchive = async function() {
+    const tbody = document.getElementById('ec-offers-tbody');
+    if (!tbody) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/admin/email-centre/offer-letters?t=${Date.now()}`);
+        if (res.ok) {
+            const data = await res.json();
+            cachedOfferLetters = data.offers || [];
+            if (cachedOfferLetters.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-400">No generated offer letters found</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = cachedOfferLetters.map(o => `
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="p-3 text-gray-500 font-mono text-[11px] whitespace-nowrap">${o.created_at || 'N/A'}</td>
+                    <td class="p-3 font-bold text-gray-900">${o.employee_name}</td>
+                    <td class="p-3 text-indigo-700 font-semibold">${o.position}</td>
+                    <td class="p-3 text-gray-500 font-mono text-[11px]">${o.employee_email}</td>
+                    <td class="p-3"><span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">${o.template}</span></td>
+                    <td class="p-3">
+                        <span class="${o.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'} px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            ${o.status}
+                        </span>
+                    </td>
+                    <td class="p-3 text-right">
+                        <a href="${API_BASE}${o.download_url}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-bold inline-flex items-center shadow-sm">
+                            <i class="fa-solid fa-file-arrow-down mr-1.5"></i> Download PDF
+                        </a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-red-500">Failed to load offer letters archive</td></tr>`;
+    }
+};
+
+window.viewHistoryDetails = function(logId) {
+    const log = cachedEmailLogs.find(l => l.id === logId);
+    if (!log) return;
+    openEmailPreview(log.recipient_email, log.subject, `<p><strong>Mode:</strong> ${log.mode}</p><p><strong>Status:</strong> ${log.status} ${log.failure_reason ? '(' + log.failure_reason + ')' : ''}</p><p><strong>Recipient Name:</strong> ${log.recipient_name}</p><p><strong>Sent At:</strong> ${log.timestamp}</p>`, true, null);
+};
+
+// ------------------------------------------
+// MODAL & FORMATTING HELPERS
+// ------------------------------------------
+window.openEmailPreview = function(to, subject, bodyHtml, showLogo=true, signature=null) {
+    const modal = document.getElementById('email-preview-modal');
+    if (!modal) return;
+    
+    document.getElementById('prev-modal-to').textContent = to;
+    document.getElementById('prev-modal-sub').textContent = subject;
+    
+    let html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+            ${showLogo ? `
+                <div style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 25px 20px; text-align: center; color: white;">
+                    <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 1px;">IGYR</h1>
+                    <p style="margin: 5px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: #bfdbfe;">India Get Your Result</p>
+                </div>
+            ` : `
+                <div style="background-color: #1e3a8a; padding: 15px 20px; text-align: center; color: white;">
+                    <h2 style="margin: 0; font-size: 18px; font-weight: 700;">IGYR Notification</h2>
+                </div>
+            `}
+            <div style="padding: 25px 35px 10px 35px; border-bottom: 2px solid #e5e7eb;">
+                <h2 style="margin: 0; font-size: 18px; color: #1f2937;">${subject}</h2>
+            </div>
+            <div style="padding: 20px 35px 30px 35px; color: #374151; font-size: 15px; line-height: 1.6;">
+                ${bodyHtml}
+                ${signature ? `<div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #4b5563;">${signature}</div>` : ''}
+            </div>
+            <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #f3f4f6; color: #9ca3af; font-size: 12px;">
+                © 2026 India Get Your Result (IGYR). All rights reserved.
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('prev-modal-body').innerHTML = html;
+    modal.classList.replace('hidden', 'flex');
+};
+
+window.closeEmailPreview = function() {
+    const modal = document.getElementById('email-preview-modal');
+    if (modal) modal.classList.replace('flex', 'hidden');
+};
+
+window.insertFormatting = function(textareaId, tag) {
+    const el = document.getElementById(textareaId);
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = el.value.substring(start, end) || "text";
+    let formatted = "";
+    if (tag === 'p') formatted = `<p>${selected}</p>`;
+    else if (tag === 'b') formatted = `<strong>${selected}</strong>`;
+    else if (tag === 'i') formatted = `<em>${selected}</em>`;
+    else if (tag === 'ul') formatted = `<ul>\n  <li>${selected}</li>\n</ul>`;
+    
+    el.value = el.value.substring(0, start) + formatted + el.value.substring(end);
+    el.focus();
+};
+
+window.insertPlaceholder = function(textareaId, ph) {
+    const el = document.getElementById(textareaId);
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    el.value = el.value.substring(0, start) + ph + el.value.substring(end);
+    el.focus();
 };

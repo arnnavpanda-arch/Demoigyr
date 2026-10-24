@@ -1,5 +1,15 @@
 let lastAppDataHash = '';
-const API_BASE = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? 'http://127.0.0.1:5001/api' : '/api';
+const isLocal = window.location.hostname === '127.0.0.1' || 
+                window.location.hostname === 'localhost' || 
+                window.location.hostname === '0.0.0.0' || 
+                window.location.hostname.startsWith('192.168.') || 
+                window.location.hostname.startsWith('10.') || 
+                window.location.port !== '' || 
+                window.location.protocol === 'file:';
+
+const API_BASE = isLocal 
+    ? `http://${(window.location.hostname && !window.location.hostname.startsWith('192.168.') && !window.location.hostname.startsWith('10.') && window.location.hostname !== '0.0.0.0') ? window.location.hostname : '127.0.0.1'}:5001/api` 
+    : '/api';
 // State Management
 const savedEmail = localStorage.getItem('igyr_session_email') || '';
 const state = {
@@ -67,7 +77,7 @@ function render() {
 async function navigate(viewName) {
     state.errorMsg = '';
     
-    if (viewName === 'dashboard') {
+    if (viewName === 'dashboard' || viewName === 'nextSteps') {
         try {
             // Fetch live pricing first (so it's independent)
             try {
@@ -664,25 +674,30 @@ function getDashboardView() {
         `;
     }
 
+    let formatsList = (pricing.formats && pricing.formats.length > 0) ? pricing.formats : [
+        { name: "Normal Tabulation", rate: pricing.normal || 50 },
+        { name: "Excel Sheet", rate: pricing.excel || 100 },
+        { name: "Admit card + Any type of Tabulation", rate: pricing.both || 150 }
+    ];
+
+    const formatsCards = formatsList.map(fmt => `
+        <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col justify-between shadow-sm">
+            <div class="text-xs uppercase font-bold text-gray-700 mb-2 leading-tight">${fmt.name}</div>
+            <div class="font-black text-xl text-green-700">₹${fmt.rate} <span class="text-[10px] font-normal text-gray-400">/ student</span></div>
+        </div>
+    `).join('');
+
     const pricingHtml = `
         <div class="mt-8 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
-            <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fa-solid fa-tags text-primary mr-2"></i> Pricing Configuration</h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div class="p-2 bg-gray-50 rounded-lg border">
-                    <div class="text-[10px] uppercase font-bold text-gray-500 mb-1">Normal</div>
-                    <div class="font-bold text-md">₹${pricing.normal} <span class="text-[9px] font-normal text-gray-400">/stu</span></div>
-                </div>
-                <div class="p-2 bg-gray-50 rounded-lg border">
-                    <div class="text-[10px] uppercase font-bold text-gray-500 mb-1">Excel</div>
-                    <div class="font-bold text-md">₹${pricing.excel} <span class="text-[9px] font-normal text-gray-400">/stu</span></div>
-                </div>
-                <div class="p-2 bg-gray-50 rounded-lg border">
-                    <div class="text-[10px] uppercase font-bold text-gray-500 mb-1">Admit card + Any type of Tabulation</div>
-                    <div class="font-bold text-md">₹${pricing.both} <span class="text-[9px] font-normal text-gray-400">/stu</span></div>
-                </div>
-                <div class="p-2 bg-purple-50 rounded-lg border border-purple-200">
-                    <div class="text-[10px] uppercase font-bold text-purple-600 mb-1">Subject Add-on</div>
-                    <div class="font-bold text-md text-purple-700">₹${pricing.subject_rate || 0} <span class="text-[9px] font-normal opacity-75">/sub</span></div>
+            <div class="border-b pb-3 mb-5">
+                <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-tags text-primary mr-2"></i> Result Formats & Rate Card</h3>
+                <p class="text-xs text-gray-500 mt-1">Official result processing rates configured by the admin</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                ${formatsCards}
+                <div class="p-4 bg-purple-50 rounded-xl border border-purple-200 flex flex-col justify-between shadow-sm">
+                    <div class="text-xs uppercase font-bold text-purple-700 mb-2 leading-tight">Subject Add-on</div>
+                    <div class="font-black text-xl text-purple-700">₹${pricing.subject_rate || 0} <span class="text-[10px] font-normal opacity-75">/ subject</span></div>
                 </div>
             </div>
             ${bankDetailsHtml}
@@ -908,6 +923,42 @@ function getDashboardView() {
 
 
 function getNextStepsView() {
+    const rawFormats = state.pricing?.formats;
+    const formats = (rawFormats && rawFormats.length > 0) ? rawFormats : [
+        { name: "Normal Tabulation", rate: state.pricing?.normal || 50 },
+        { name: "Excel Sheet", rate: state.pricing?.excel || 100 },
+        { name: "Admit card + Any type of Tabulation", rate: state.pricing?.both || 150 }
+    ];
+
+    if (!state.resultDetails.option && formats.length > 0) {
+        state.resultDetails.option = formats[0].name;
+    }
+
+    const formatsHtml = formats.map((fmt, idx) => {
+        const isChecked = state.resultDetails.option === fmt.name || (state.resultDetails.option === 'normal' && idx === 0) || (state.resultDetails.option === 'excel' && fmt.name.toLowerCase().includes('excel')) || (state.resultDetails.option === 'both' && fmt.name.toLowerCase().includes('admit'));
+        let icon = "fa-file-lines";
+        const nameLower = fmt.name.toLowerCase();
+        if (nameLower.includes("tabulation") || nameLower.includes("normal") || nameLower.includes("table")) icon = "fa-table";
+        else if (nameLower.includes("excel") || nameLower.includes("sheet") || nameLower.includes("csv")) icon = "fa-file-excel";
+        else if (nameLower.includes("admit") || nameLower.includes("card") || nameLower.includes("id")) icon = "fa-id-card-clip";
+        else if (nameLower.includes("cert") || nameLower.includes("degree")) icon = "fa-certificate";
+        else if (nameLower.includes("qr") || nameLower.includes("code")) icon = "fa-qrcode";
+        else if (nameLower.includes("mark") || nameLower.includes("grade")) icon = "fa-award";
+
+        return `
+            <label class="relative flex flex-col p-6 border-2 rounded-2xl cursor-pointer transition-all ${isChecked ? 'border-primary bg-blue-50/60 shadow-md ring-2 ring-blue-500/20' : 'border-gray-100 hover:border-gray-300 bg-white'}">
+                <input type="radio" name="formatOption" value="${fmt.name}" ${isChecked ? 'checked' : ''} class="absolute right-4 top-4 w-5 h-5 accent-primary" />
+                <i class="fa-solid ${icon} text-3xl mb-4 ${isChecked ? 'text-primary' : 'text-gray-400'}"></i>
+                <span class="block font-bold text-gray-800 mb-1 text-base leading-snug">${fmt.name}</span>
+                <span class="text-xs text-gray-500 leading-tight mb-4">Official result format</span>
+                <div class="mt-auto pt-3 border-t border-gray-100 flex items-baseline justify-between">
+                    <span class="text-xs font-semibold text-gray-500">Rate:</span>
+                    <span class="text-lg font-black text-green-600">₹${fmt.rate} <span class="text-[10px] font-normal text-gray-400">/ stu</span></span>
+                </div>
+            </label>
+        `;
+    }).join('');
+
     return `
     <div class="min-h-screen bg-gray-50 py-10 px-4 fade-in">
         <div class="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl border border-gray-100 p-8">
@@ -938,28 +989,12 @@ function getNextStepsView() {
                 </div>
 
                 <div>
-                    <label class="block text-lg font-bold text-gray-800 mb-4">Select Output Format</label>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <label class="relative flex flex-col p-6 border-2 rounded-2xl cursor-pointer transition-all ${state.resultDetails.option === 'normal' ? 'border-primary bg-blue-50/50 shadow-md' : 'border-gray-100 hover:border-gray-300'}">
-                            <input type="radio" name="formatOption" value="normal" ${state.resultDetails.option === 'normal' ? 'checked' : ''} class="absolute right-4 top-4 w-5 h-5 accent-primary" />
-                            <i class="fa-solid fa-table text-3xl mb-4 ${state.resultDetails.option === 'normal' ? 'text-primary' : 'text-gray-400'}"></i>
-                            <span class="block font-bold text-gray-800 mb-1">Normal Tabulation</span>
-                            <span class="text-sm text-gray-500 leading-tight">Standard web view of results.</span>
-                        </label>
-                        
-                        <label class="relative flex flex-col p-6 border-2 rounded-2xl cursor-pointer transition-all ${state.resultDetails.option === 'excel' ? 'border-primary bg-blue-50/50 shadow-md' : 'border-gray-100 hover:border-gray-300'}">
-                            <input type="radio" name="formatOption" value="excel" ${state.resultDetails.option === 'excel' ? 'checked' : ''} class="absolute right-4 top-4 w-5 h-5 accent-primary" />
-                            <i class="fa-solid fa-file-excel text-3xl mb-4 ${state.resultDetails.option === 'excel' ? 'text-primary' : 'text-gray-400'}"></i>
-                            <span class="block font-bold text-gray-800 mb-1">Excel Sheet</span>
-                            <span class="text-sm text-gray-500 leading-tight">Detailed downloadable excel report.</span>
-                        </label>
-                        
-                        <label class="relative flex flex-col p-6 border-2 rounded-2xl cursor-pointer transition-all ${state.resultDetails.option === 'both' ? 'border-primary bg-blue-50/50 shadow-md' : 'border-gray-100 hover:border-gray-300'}">
-                            <input type="radio" name="formatOption" value="both" ${state.resultDetails.option === 'both' ? 'checked' : ''} class="absolute right-4 top-4 w-5 h-5 accent-primary" />
-                            <i class="fa-solid fa-id-card-clip text-3xl mb-4 ${state.resultDetails.option === 'both' ? 'text-primary' : 'text-gray-400'}"></i>
-                            <span class="block font-bold text-gray-800 mb-1">Admit card + Any type of Tabulation</span>
-                            <span class="text-sm text-gray-500 leading-tight">Full package with student admit cards.</span>
-                        </label>
+                    <div class="flex items-center justify-between mb-4">
+                        <label class="block text-lg font-bold text-gray-800">Select Output Format</label>
+                        <span class="text-xs text-gray-500 font-medium">Choose from admin configured formats</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        ${formatsHtml}
                     </div>
                 </div>
 
@@ -981,7 +1016,7 @@ function getPaymentView() {
                 <i class="fa-solid fa-file-invoice text-3xl text-blue-600"></i>
             </div>
             <h2 class="text-2xl font-bold text-gray-800 mb-2">Request Output Format</h2>
-            <p class="text-gray-500 mb-6">You have selected <strong>${state.resultDetails.option.toUpperCase()}</strong> format. The admin will review this request and provide the required document upload slots.</p>
+            <p class="text-gray-500 mb-6">You have selected <strong>${state.resultDetails.option}</strong> format. The admin will review this request and provide the required document upload slots.</p>
             
             <button id="btn-pay" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-1">
                 Submit Request to Admin <i class="fa-solid fa-arrow-right ml-2"></i>
@@ -1296,6 +1331,10 @@ function attachEventListeners() {
 
         nextStepsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const checkedRadio = document.querySelector('input[name="formatOption"]:checked');
+            if (checkedRadio) {
+                state.resultDetails.option = checkedRadio.value;
+            }
             state.resultDetails.totalStudents = document.getElementById('res-students').value;
             state.resultDetails.examDate = document.getElementById('res-date').value;
             state.resultDetails.totalSubjects = document.getElementById('res-subjects').value;

@@ -46,6 +46,9 @@
             <div onclick="switchTab('institutes')" id="tab-institutes" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
                 <i class="fa-solid fa-building-columns w-6 text-purple-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Registered Institutes</span>
             </div>
+            <div onclick="switchTab('email-centre')" id="tab-email-centre" class="sidebar-item px-3 md:px-6 py-2 md:py-3 font-medium flex items-center flex-shrink-0 text-sm md:text-base rounded-lg md:rounded-none">
+                <i class="fa-solid fa-paper-plane w-6 text-cyan-400 text-lg"></i> <span class="ml-2 md:ml-1 whitespace-nowrap">Email Centre</span>
+            </div>
         </nav>
         
         <div class="p-2 md:p-6 border-t border-gray-800 flex-shrink-0">
@@ -150,23 +153,56 @@
                         <form id="pricing-form" class="space-y-6">
                             
                             <div>
-                                <h3 class="text-lg font-bold border-b pb-2 mb-4">Pricing Configuration</h3>
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-gray-500 mb-1">Normal (Per Student)</label>
-                                        <div class="relative"><span class="absolute left-3 top-2 text-gray-400 font-bold">₹</span><input type="number" id="price-normal" class="w-full pl-8 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"></div>
+                                <div class="border-b pb-2 mb-4">
+                                    <h3 class="text-lg font-bold text-gray-800">Result Formats & Pricing Configuration</h3>
+                                    <p class="text-xs text-gray-500 mt-0.5">Add custom result format types and student rates. These will directly appear in the institute result format selection screen.</p>
+                                </div>
+                                
+                                <!-- Add New Custom Format Box -->
+                                <div class="bg-blue-50/70 border border-blue-200 p-4 rounded-2xl mb-5 shadow-sm">
+                                    <div class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2.5 flex items-center">
+                                        <i class="fa-solid fa-plus-circle text-blue-600 mr-2 text-sm"></i> Add New Format & Rate
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-gray-500 mb-1">Excel (Per Student)</label>
-                                        <div class="relative"><span class="absolute left-3 top-2 text-gray-400 font-bold">₹</span><input type="number" id="price-excel" class="w-full pl-8 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"></div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                        <div class="sm:col-span-7">
+                                            <label class="block text-[11px] font-bold text-gray-600 mb-1">Format Name / Choose Type</label>
+                                            <input type="text" id="new-format-name" placeholder="e.g. Normal Tabulation, Marksheet + Photo" class="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                                        </div>
+                                        <div class="sm:col-span-3">
+                                            <label class="block text-[11px] font-bold text-gray-600 mb-1">Rate (Per Student)</label>
+                                            <div class="relative">
+                                                <span class="absolute left-3 top-2.5 text-gray-400 font-bold text-sm">₹</span>
+                                                <input type="number" min="0" id="new-format-rate" placeholder="50" class="w-full pl-8 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-green-700 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                                            </div>
+                                        </div>
+                                        <div class="sm:col-span-2 flex items-end">
+                                            <button type="button" id="btn-add-format" onclick="addNewFormat()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl text-sm shadow-sm transition-all flex items-center justify-center">
+                                                <i class="fa-solid fa-plus mr-1.5"></i> Add
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-gray-500 mb-1">Admit card + Any type of Tabulation</label>
-                                        <div class="relative"><span class="absolute left-3 top-2 text-gray-400 font-bold">₹</span><input type="number" id="price-both" class="w-full pl-8 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"></div>
+                                </div>
+                                
+                                <!-- Active Formats List Container -->
+                                <div class="mb-5">
+                                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center justify-between">
+                                        <span>Active Formats (Available to Institutes)</span>
+                                        <span class="text-[10px] text-gray-400 font-normal">Edit name/rate directly or delete</span>
+                                    </label>
+                                    <div id="formats-list-container" class="space-y-2.5">
+                                        <div class="text-sm text-gray-400 py-3 text-center">Loading formats...</div>
                                     </div>
+                                </div>
+                                
+                                <!-- Add-on (Subject Rate) -->
+                                <div class="pt-4 border-t border-gray-100 flex items-center justify-between">
                                     <div>
-                                        <label class="block text-[10px] font-bold text-purple-600 mb-1">Subject Add-on (Per Subject)</label>
-                                        <div class="relative"><span class="absolute left-3 top-2 text-purple-400 font-bold">₹</span><input type="number" id="price-subject" class="w-full pl-8 pr-3 py-2 border border-purple-200 bg-purple-50 rounded focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm font-bold text-purple-700"></div>
+                                        <label class="block text-xs font-bold text-purple-700 mb-0.5">Subject Add-on (Per Subject / Optional)</label>
+                                        <p class="text-[11px] text-gray-400">Additional cost charged per subject</p>
+                                    </div>
+                                    <div class="relative w-36">
+                                        <span class="absolute left-3 top-2 text-purple-400 font-bold text-sm">₹</span>
+                                        <input type="number" id="price-subject" class="w-full pl-8 pr-3 py-1.5 border border-purple-200 bg-purple-50/50 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm font-bold text-purple-700">
                                     </div>
                                 </div>
                             </div>
@@ -238,16 +274,541 @@
                         </div>
                     </div>
                 </div>
+    
+            <!-- Email Centre Section -->
+            <section id="sec-email-centre" class="section-content fade-in">
+                <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-6 border-b border-gray-200 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                            <i class="fa-solid fa-envelope-open-text text-cyan-600 mr-3"></i> Super Admin Email Centre
+                        </h2>
+                        <p class="text-sm text-gray-500 mt-1">Broadcast announcements to registered institutes, issue personalized employee offer letters, and send customized correspondence.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="refreshEmailCentre()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center">
+                            <i class="fa-solid fa-rotate-right mr-2 text-cyan-600"></i> Refresh Stats
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Dashboard Statistics Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div>
+                            <span class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Institutes</span>
+                            <span id="ec-stat-institutes" class="text-2xl font-black text-gray-800">--</span>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-building-columns"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div>
+                            <span class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Sent</span>
+                            <span id="ec-stat-sent" class="text-2xl font-black text-purple-700">--</span>
+                        </div>
+                        <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div>
+                            <span class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Delivered</span>
+                            <span id="ec-stat-delivered" class="text-2xl font-black text-emerald-600">--</span>
+                        </div>
+                        <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div>
+                            <span class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Failed</span>
+                            <span id="ec-stat-failed" class="text-2xl font-black text-rose-600">--</span>
+                        </div>
+                        <div class="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode Navigation Sub-Tabs -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
+                    <div class="flex flex-wrap border-b border-gray-100 bg-gray-50/70 p-2 gap-2">
+                        <button onclick="switchEmailMode('mode1')" id="btn-mode1" class="ec-mode-tab active px-4 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center">
+                            <i class="fa-solid fa-bullhorn mr-2 text-blue-600"></i> Mode 1: Send to Institutes
+                        </button>
+                        <button onclick="switchEmailMode('mode2')" id="btn-mode2" class="ec-mode-tab px-4 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center text-gray-600 hover:text-gray-900">
+                            <i class="fa-solid fa-file-signature mr-2 text-indigo-600"></i> Mode 2: Employee Offer Letter
+                        </button>
+                        <button onclick="switchEmailMode('mode3')" id="btn-mode3" class="ec-mode-tab px-4 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center text-gray-600 hover:text-gray-900">
+                            <i class="fa-solid fa-envelope-circle-check mr-2 text-teal-600"></i> Mode 3: Separate Message
+                        </button>
+                        <button onclick="switchEmailMode('history')" id="btn-history" class="ec-mode-tab px-4 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center text-gray-600 hover:text-gray-900 ml-auto">
+                            <i class="fa-solid fa-clock-rotate-left mr-2 text-amber-600"></i> Email History & Logs
+                        </button>
+                    </div>
+
+                    <!-- MODE 1 PANEL: SEND TO INSTITUTES -->
+                    <div id="panel-mode1" class="ec-panel p-6">
+                        <div class="max-w-4xl space-y-6">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Send Announcements & Updates to Institutes</h3>
+                                <p class="text-xs text-gray-500">Dispatch bulk or targeted notices, system updates, and official communications to educational partners.</p>
+                            </div>
+
+                            <!-- Recipient Target Choice & Always-Visible Institutes List -->
+                            <div class="bg-gray-50 p-5 rounded-2xl border border-gray-200">
+                                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">Select Recipients from Database</label>
+                                        <p class="text-[11px] text-gray-500">All registered educational institutes stored in your database</p>
+                                    </div>
+                                    <div class="flex items-center gap-4 bg-white px-3 py-1.5 rounded-xl border border-gray-200 text-xs">
+                                        <label class="flex items-center gap-1.5 cursor-pointer">
+                                            <input type="radio" name="m1-target-type" value="all" checked onchange="toggleM1RecipientPicker()" class="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500">
+                                            <span class="font-bold text-gray-800">Send to All (<span id="m1-count-all">0</span>)</span>
+                                        </label>
+                                        <span class="text-gray-300">|</span>
+                                        <label class="flex items-center gap-1.5 cursor-pointer">
+                                            <input type="radio" name="m1-target-type" value="selected" onchange="toggleM1RecipientPicker()" class="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500">
+                                            <span class="font-bold text-gray-800">Pick Selected</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Institute Checkbox Selector (Always Visible) -->
+                                <div id="m1-selector-box" class="pt-3 border-t border-gray-200">
+                                    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-3">
+                                        <input type="text" id="m1-search-input" placeholder="Search institute name, email or district..." onkeyup="filterM1Institutes()" class="w-full sm:w-80 px-3 py-1.5 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                        <div class="flex items-center gap-2 text-xs">
+                                            <button type="button" onclick="selectAllM1(true)" class="text-blue-600 hover:underline font-bold">Select All</button>
+                                            <span class="text-gray-300">|</span>
+                                            <button type="button" onclick="selectAllM1(false)" class="text-gray-500 hover:underline font-medium">Deselect All</button>
+                                            <span class="ml-2 font-bold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full text-[11px]" id="m1-selected-badge">0 Selected</span>
+                                        </div>
+                                    </div>
+                                    <div id="m1-institutes-list" class="max-h-60 overflow-y-auto divide-y divide-gray-100 border rounded-xl bg-white p-2">
+                                        <div class="p-4 text-center text-gray-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading institutes from database...</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Email Subject -->
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Email Subject *</label>
+                                <input type="text" id="m1-subject" placeholder="e.g. Important Notice: Academic Result Publishing Schedule for 2026" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium">
+                            </div>
+
+                            <!-- Message Body (Normal Text Typing - No Code) -->
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">Email Message Body (Normal Text – No Code Needed) *</label>
+                                        <p class="text-[11px] text-gray-400">Type normally just like in an email. Line breaks and paragraphs are formatted automatically.</p>
+                                    </div>
+                                    <div>
+                                        <button type="button" onclick="insertPlaceholder('m1-message', '{{institute_name}}')" class="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-mono text-xs font-bold" title="Insert Dynamic Institute Name">+ Insert Institute Name</button>
+                                    </div>
+                                </div>
+                                <textarea id="m1-message" rows="8" placeholder="Type your email message here normally...
+
+Dear Institute Team,
+
+We are writing to share an important announcement regarding our upcoming examination result publishing window. Please review the updated guidelines...
+
+Best regards,
+Super Admin Team" class="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-normal text-gray-800 leading-relaxed"></textarea>
+                            </div>
+
+                            <!-- Options & Attachment -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
+                                <div class="space-y-2">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="m1-logo-toggle" checked class="w-4 h-4 text-blue-600 rounded">
+                                        <span class="font-bold text-gray-700">Include Official IGYR Header & Logo</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="m1-sig-toggle" checked class="w-4 h-4 text-blue-600 rounded">
+                                        <span class="font-bold text-gray-700">Include IGYR Super Admin Verification Signature</span>
+                                    </label>
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-gray-700 mb-1">Optional File Attachment</label>
+                                    <input type="file" id="m1-attachment" class="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+                                <span id="m1-summary-text" class="text-xs font-bold text-gray-500">Ready to dispatch</span>
+                                <div class="flex gap-3 w-full sm:w-auto">
+                                    <button type="button" onclick="previewM1Email()" class="flex-1 sm:flex-none bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-5 py-3 rounded-xl text-sm transition-colors flex items-center justify-center">
+                                        <i class="fa-regular fa-eye mr-2"></i> Preview Email
+                                    </button>
+                                    <button type="button" id="btn-send-m1" onclick="sendM1Email()" class="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center">
+                                        <i class="fa-solid fa-paper-plane mr-2"></i> Send to Institutes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MODE 2 PANEL: EMPLOYEE OFFER LETTER -->
+                    <div id="panel-mode2" class="ec-panel p-6 hidden">
+                        <div class="max-w-4xl space-y-6">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Offer Letter Generator & Email Sender</h3>
+                                <p class="text-xs text-gray-500">Generate high-resolution corporate offer letters, automatically attach customized PDF documents, and dispatch directly to candidates.</p>
+                            </div>
+
+                            <!-- Step 1: Employee Details Form -->
+                            <div class="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                                <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-4 flex items-center">
+                                    <span class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] mr-2">1</span> Employee & Position Details
+                                </h4>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Employee Full Name *</label>
+                                        <input type="text" id="ol-emp-name" placeholder="e.g. Rahul Sharma" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Employee Email Address *</label>
+                                        <input type="email" id="ol-emp-email" placeholder="rahul.sharma@example.com" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Phone Number</label>
+                                        <input type="text" id="ol-emp-phone" placeholder="+91 9876543210" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Offered Job Position *</label>
+                                        <input type="text" id="ol-emp-position" placeholder="e.g. Senior Software Engineer" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Department</label>
+                                        <input type="text" id="ol-emp-dept" placeholder="Technology & Verification" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Company Name</label>
+                                        <input type="text" id="ol-company-name" value="IGYR - India Get Your Result" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Job Location</label>
+                                        <input type="text" id="ol-emp-location" placeholder="e.g. Remote / New Delhi" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Date of Joining</label>
+                                        <input type="date" id="ol-emp-joining" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Issue Date</label>
+                                        <input type="date" id="ol-emp-issue-date" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Salary / Compensation</label>
+                                        <input type="text" id="ol-emp-salary" placeholder="e.g. ₹5,40,000 Per Annum" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-green-700 outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Employment Type</label>
+                                        <select id="ol-emp-type" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                            <option value="Full-time">Full-time</option>
+                                            <option value="Part-time">Part-time</option>
+                                            <option value="Internship">Internship</option>
+                                            <option value="Contract">Contract</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Reporting Manager</label>
+                                        <input type="text" id="ol-emp-manager" placeholder="Director of Operations" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Acceptance Deadline</label>
+                                        <input type="date" id="ol-emp-deadline" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm text-red-600 font-semibold outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Authorized Signatory Name</label>
+                                        <input type="text" id="ol-sig-name" value="Arnav Panda" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-700 mb-1">Signatory Designation</label>
+                                        <input type="text" id="ol-sig-desig" value="Director of Operations & HR" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">Additional Terms & Conditions (Optional / Editable)</label>
+                                    <textarea id="ol-emp-terms" rows="3" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">1. Confidentiality: You will maintain strict confidentiality of all institutional data, student marks, and proprietary systems.
+2. Verification: This offer is subject to verification of submitted academic and professional credentials.
+3. Code of Conduct: You agree to comply with all organization policies and ethical guidelines.
+4. Notice Period: Standard 30 days notice applies for separation after completion of probation.</textarea>
+                                </div>
+                            </div>
+
+                            <!-- Step 2: Select Offer Letter Template -->
+                            <div>
+                                <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-3 flex items-center">
+                                    <span class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] mr-2">2</span> Select Corporate Design Template
+                                </h4>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <label class="border-2 rounded-2xl p-4 cursor-pointer transition-all flex flex-col justify-between border-indigo-600 bg-indigo-50/50 shadow-sm" id="tpl-card-corporate">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span class="font-bold text-sm text-gray-800">Corporate Standard</span>
+                                            <input type="radio" name="ol-template" value="corporate" checked onchange="updateTemplateSelection()" class="text-indigo-600">
+                                        </div>
+                                        <p class="text-xs text-gray-500">Classic executive format with navy accents, formal typography, and structured salary block.</p>
+                                    </label>
+                                    <label class="border-2 rounded-2xl p-4 cursor-pointer transition-all flex flex-col justify-between border-gray-200 hover:border-gray-300 bg-white" id="tpl-card-modern">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span class="font-bold text-sm text-gray-800">Modern Executive</span>
+                                            <input type="radio" name="ol-template" value="modern" onchange="updateTemplateSelection()" class="text-indigo-600">
+                                        </div>
+                                        <p class="text-xs text-gray-500">Vibrant royal blue theme with modern card highlights and clean contemporary layout.</p>
+                                    </label>
+                                    <label class="border-2 rounded-2xl p-4 cursor-pointer transition-all flex flex-col justify-between border-gray-200 hover:border-gray-300 bg-white" id="tpl-card-technical">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span class="font-bold text-sm text-gray-800">Tech & Specialist</span>
+                                            <input type="radio" name="ol-template" value="technical" onchange="updateTemplateSelection()" class="text-indigo-600">
+                                        </div>
+                                        <p class="text-xs text-gray-500">Teal minimalist theme optimized for engineers, data analysts, and technical personnel.</p>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Step 3: Customized Accompanying Email Body -->
+                            <div>
+                                <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-2 flex items-center">
+                                    <span class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] mr-2">3</span> Email Message Body (Attached with PDF)
+                                </h4>
+                                <textarea id="ol-custom-email" rows="4" placeholder="Dear [Candidate], Congratulations! We are pleased to offer you the position..." class="w-full p-3 border border-gray-200 rounded-xl text-xs font-normal text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                                <p class="text-[11px] text-gray-400 mt-1">Leave blank to use the standard high-conversion recruitment invitation with key offer highlights.</p>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t">
+                                <button type="button" onclick="previewOfferLetterPDF()" class="w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-5 py-3 rounded-xl text-sm transition-colors flex items-center justify-center">
+                                    <i class="fa-regular fa-file-pdf mr-2 text-red-600 text-base"></i> Preview PDF in Browser
+                                </button>
+                                <button type="button" id="btn-send-offer" onclick="sendOfferLetter()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-7 py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center">
+                                    <i class="fa-solid fa-paper-plane mr-2"></i> Send Offer Letter by Email
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MODE 3 PANEL: SEPARATE MESSAGE TO INSTITUTES -->
+                    <div id="panel-mode3" class="ec-panel p-6 hidden">
+                        <div class="max-w-4xl space-y-6">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Send Customized Messages to Institutes</h3>
+                                <p class="text-xs text-gray-500">Pick single or multiple institutes, use dynamic placeholders, or craft tailored correspondence for specific campuses.</p>
+                            </div>
+
+                            <!-- Institute Picker with Search -->
+                            <div class="bg-gray-50 p-5 rounded-2xl border border-gray-200">
+                                <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-3">
+                                    <label class="block text-xs font-bold text-teal-900 uppercase tracking-wider">Select Target Institutes</label>
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <button type="button" onclick="selectAllM3(true)" class="text-teal-600 hover:underline font-bold">Select All</button>
+                                        <span class="text-gray-300">|</span>
+                                        <button type="button" onclick="selectAllM3(false)" class="text-gray-500 hover:underline font-medium">Clear Selection</button>
+                                        <span id="m3-selected-badge" class="ml-2 font-bold bg-teal-100 text-teal-800 px-2.5 py-1 rounded-full text-[11px]">0 Selected</span>
+                                    </div>
+                                </div>
+                                <input type="text" id="m3-search-input" placeholder="Search institute name, location or email..." onkeyup="filterM3Institutes()" class="w-full mb-3 px-3.5 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                                <div id="m3-institutes-list" class="max-h-52 overflow-y-auto divide-y divide-gray-100 border rounded-xl bg-white p-2">
+                                    <!-- Injected by JS -->
+                                </div>
+                            </div>
+
+                            <!-- Subject with Placeholders -->
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Email Subject *</label>
+                                <input type="text" id="m3-subject" placeholder="e.g. Account Clearance & Result Schedule for {{institute_name}}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-sm font-medium">
+                            </div>
+
+                            <!-- Personalization Helper Chips -->
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <div><label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">Custom Message Body (Normal Text – No Code Needed) *</label><p class="text-[11px] text-gray-400">Type your message normally. Placeholders will automatically be replaced with each institute's details.</p></div>
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-[11px] text-gray-400 mr-1">Insert tag:</span>
+                                        <button type="button" onclick="insertPlaceholder('m3-message', '{{institute_name}}')" class="px-2 py-0.5 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded text-xs font-mono font-bold">+ {{institute_name}}</button>
+                                        <button type="button" onclick="insertPlaceholder('m3-message', '{{email}}')" class="px-2 py-0.5 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded text-xs font-mono font-bold">+ {{email}}</button>
+                                        <button type="button" onclick="insertPlaceholder('m3-message', '{{state}}')" class="px-2 py-0.5 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded text-xs font-mono font-bold">+ {{state}}</button>
+                                        <button type="button" onclick="insertPlaceholder('m3-message', '{{district}}')" class="px-2 py-0.5 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded text-xs font-mono font-bold">+ {{district}}</button>
+                                    </div>
+                                </div>
+                                <textarea id="m3-message" rows="7" placeholder="Dear {{institute_name}} Team,&#10;&#10;We are writing regarding your examination records for {{district}}, {{state}}..." class="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-sm font-normal"></textarea>
+                            </div>
+
+                            <!-- Options & Attachment -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
+                                <div class="space-y-2">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="m3-logo-toggle" checked class="w-4 h-4 text-teal-600 rounded">
+                                        <span class="font-bold text-gray-700">Include Official Company Header</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="m3-sig-toggle" checked class="w-4 h-4 text-teal-600 rounded">
+                                        <span class="font-bold text-gray-700">Include Official Signoff</span>
+                                    </label>
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-gray-700 mb-1">Optional Document Attachment</label>
+                                    <input type="file" id="m3-attachment" class="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-teal-100 file:text-teal-700 hover:file:bg-teal-200">
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t">
+                                <button type="button" onclick="previewM3Email()" class="w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-5 py-3 rounded-xl text-sm transition-colors flex items-center justify-center">
+                                    <i class="fa-regular fa-eye mr-2"></i> Preview First Recipient
+                                </button>
+                                <button type="button" id="btn-send-m3" onclick="sendM3Email()" class="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white font-bold px-7 py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center">
+                                    <i class="fa-solid fa-paper-plane mr-2"></i> Send Customized Messages
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MODE 4 PANEL: EMAIL HISTORY & AUDIT LOGS -->
+                    <div id="panel-history" class="ec-panel p-6 hidden">
+                        <div class="space-y-6">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">Email Audit Trail & Offer Letters Archive</h3>
+                                    <p class="text-xs text-gray-500">Every message sent through the Email Centre is permanently tracked with delivery confirmation.</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="switchHistorySubTab('all-logs')" id="btn-hist-logs" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white">All Dispatches</button>
+                                    <button onclick="switchHistorySubTab('offer-archive')" id="btn-hist-offers" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200">Generated Offer Letters</button>
+                                </div>
+                            </div>
+
+                            <!-- Sub-view: All Dispatches Table -->
+                            <div id="subview-all-logs" class="space-y-4">
+                                <!-- Filters -->
+                                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                    <input type="text" id="hist-search" placeholder="Search recipient, email, subject..." onkeyup="filterHistoryLogs()" class="sm:col-span-2 px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 bg-white">
+                                    <select id="hist-mode-filter" onchange="loadEmailHistory()" class="px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 bg-white font-medium">
+                                        <option value="all">All Modes</option>
+                                        <option value="Institutes Announcement">Institutes Announcement</option>
+                                        <option value="Employee Offer Letter">Employee Offer Letter</option>
+                                        <option value="Custom Institute Message">Custom Institute Message</option>
+                                    </select>
+                                    <select id="hist-status-filter" onchange="loadEmailHistory()" class="px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 bg-white font-medium">
+                                        <option value="all">All Statuses</option>
+                                        <option value="Delivered">Delivered</option>
+                                        <option value="Failed">Failed</option>
+                                    </select>
+                                </div>
+
+                                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-left text-xs">
+                                            <thead class="bg-gray-800 text-white">
+                                                <tr>
+                                                    <th class="p-3">Date & Time</th>
+                                                    <th class="p-3">Mode</th>
+                                                    <th class="p-3">Recipient</th>
+                                                    <th class="p-3">Subject</th>
+                                                    <th class="p-3">Status</th>
+                                                    <th class="p-3 text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ec-history-tbody" class="divide-y divide-gray-100">
+                                                <tr><td colspan="6" class="p-8 text-center text-gray-400">Loading dispatch history...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sub-view: Offer Letters Archive -->
+                            <div id="subview-offer-archive" class="hidden space-y-4">
+                                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-left text-xs">
+                                            <thead class="bg-indigo-900 text-white">
+                                                <tr>
+                                                    <th class="p-3">Issue Date</th>
+                                                    <th class="p-3">Employee Name</th>
+                                                    <th class="p-3">Position</th>
+                                                    <th class="p-3">Email Address</th>
+                                                    <th class="p-3">Template</th>
+                                                    <th class="p-3">Delivery</th>
+                                                    <th class="p-3 text-right">Download PDF</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ec-offers-tbody" class="divide-y divide-gray-100">
+                                                <tr><td colspan="7" class="p-8 text-center text-gray-400">Loading offer letter archive...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Preview Modal -->
+            <div id="email-preview-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+                <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col fade-in">
+                    <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
+                        <h3 class="font-bold text-base text-gray-800 flex items-center">
+                            <i class="fa-regular fa-envelope mr-2 text-cyan-600"></i> Email Preview
+                        </h3>
+                        <button onclick="closeEmailPreview()" class="text-gray-400 hover:text-gray-700"><i class="fa-solid fa-xmark text-lg"></i></button>
+                    </div>
+                    <div class="p-4 bg-gray-100 border-b text-xs space-y-1 font-mono">
+                        <div><strong>To:</strong> <span id="prev-modal-to">recipient@example.com</span></div>
+                        <div><strong>Subject:</strong> <span id="prev-modal-sub">Subject</span></div>
+                    </div>
+                    <div id="prev-modal-body" class="p-6 overflow-y-auto flex-1 bg-white">
+                        <!-- Preview injected by JS -->
+                    </div>
+                    <div class="p-4 border-t bg-gray-50 flex justify-end">
+                        <button onclick="closeEmailPreview()" class="px-5 py-2 bg-gray-800 text-white font-bold rounded-xl text-xs hover:bg-black transition-colors">Close Preview</button>
+                    </div>
+                </div>
+            </div>
+
     </main>
 
-    <script src="admin.js?v=2048"></script>
+    <script src="admin.js?v=2060"></script>
     <script>
         function switchTab(tabId) {
             document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active', 'border-l-4'));
-            document.getElementById('tab-' + tabId).classList.add('active', 'border-l-4');
+            const tabBtn = document.getElementById('tab-' + tabId);
+            if (tabBtn) tabBtn.classList.add('active', 'border-l-4');
             
             document.querySelectorAll('.section-content').forEach(el => el.classList.remove('active'));
-            document.getElementById('sec-' + tabId).classList.add('active');
+            const sec = document.getElementById('sec-' + tabId);
+            if (sec) sec.classList.add('active');
+
+            if (tabId === 'email-centre') {
+                if (typeof refreshEmailCentre === 'function') refreshEmailCentre();
+            } else if (tabId === 'pricing') {
+                if (typeof loadPricing === 'function') loadPricing();
+            } else {
+                if (typeof loadApplication === 'function') loadApplication();
+            }
         }
     </script>
 </body>

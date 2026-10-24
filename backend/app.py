@@ -6,7 +6,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from database import get_db
-from email_service import send_email, send_email_with_attachment
+from email_service import send_email, send_email_with_attachment, send_email_ex
+from pdf_generator import generate_offer_letter_pdf
 import random
 import os
 from datetime import datetime
@@ -374,7 +375,19 @@ def admin_approve_format():
     except ValueError:
         subjects = 0
         
-    price_per = pricing.get(option, 50)
+    price_per = None
+    formats = pricing.get("formats", [])
+    if isinstance(formats, list):
+        for f in formats:
+            if isinstance(f, dict) and f.get("name", "").strip().lower() == option.strip().lower():
+                price_per = f.get("rate")
+                break
+    if price_per is None:
+        price_per = pricing.get(option, 50)
+    try:
+        price_per = float(price_per)
+    except (ValueError, TypeError):
+        price_per = 50.0
     subject_rate = float(pricing.get("subject_rate", 0))
     
     # Calculate base student cost + subject add-on cost
@@ -686,9 +699,34 @@ def admin_mark_task_done():
 def get_pricing():
     db = get_db()
     pricing = db['config'].find_one({"type": "pricing"})
+    default_formats = [
+        {"name": "Normal Tabulation", "rate": 50},
+        {"name": "Excel Sheet", "rate": 100},
+        {"name": "Admit card + Any type of Tabulation", "rate": 150}
+    ]
     if not pricing:
-        return jsonify({"normal": 50, "excel": 100, "both": 150, "bank_account": "", "ifsc": "", "phone": ""}), 200
+        return jsonify({
+            "formats": default_formats,
+            "normal": 50, 
+            "excel": 100, 
+            "both": 150, 
+            "subject_rate": 0,
+            "bank_account": "", 
+            "ifsc": "", 
+            "phone": "",
+            "message": ""
+        }), 200
+        
+    formats = pricing.get("formats")
+    if not formats or not isinstance(formats, list) or len(formats) == 0:
+        formats = [
+            {"name": "Normal Tabulation", "rate": int(pricing.get("normal", 50))},
+            {"name": "Excel Sheet", "rate": int(pricing.get("excel", 100))},
+            {"name": "Admit card + Any type of Tabulation", "rate": int(pricing.get("both", 150))}
+        ]
+        
     return jsonify({
+        "formats": formats,
         "normal": pricing.get("normal", 50),
         "excel": pricing.get("excel", 100),
         "both": pricing.get("both", 150),
@@ -701,15 +739,47 @@ def get_pricing():
 
 @app.route('/api/admin/pricing', methods=['POST'])
 def update_pricing():
-    data = request.json
+    data = request.json or {}
     db = get_db()
+    
+    raw_formats = data.get("formats", [])
+    cleaned_formats = []
+    if isinstance(raw_formats, list):
+        for f in raw_formats:
+            if isinstance(f, dict) and f.get("name"):
+                name = str(f.get("name")).strip()
+                try:
+                    rate = float(f.get("rate", 0))
+                    rate = int(rate) if rate.is_integer() else rate
+                except (ValueError, TypeError):
+                    rate = 0
+                if name:
+                    cleaned_formats.append({"name": name, "rate": rate})
+                    
+    if not cleaned_formats:
+        cleaned_formats = [
+            {"name": "Normal Tabulation", "rate": int(data.get("normal", 50))},
+            {"name": "Excel Sheet", "rate": int(data.get("excel", 100))},
+            {"name": "Admit card + Any type of Tabulation", "rate": int(data.get("both", 150))}
+        ]
+
+    normal_val = cleaned_formats[0]["rate"] if len(cleaned_formats) > 0 else int(data.get("normal", 50))
+    excel_val = cleaned_formats[1]["rate"] if len(cleaned_formats) > 1 else int(data.get("excel", 100))
+    both_val = cleaned_formats[2]["rate"] if len(cleaned_formats) > 2 else int(data.get("both", 150))
+    
+    try:
+        subject_rate = int(data.get("subject_rate", 0))
+    except (ValueError, TypeError):
+        subject_rate = 0
+
     db['config'].update_one(
         {"type": "pricing"},
         {"$set": {
-            "normal": int(data.get("normal", 50)),
-            "excel": int(data.get("excel", 100)),
-            "both": int(data.get("both", 150)),
-            "subject_rate": int(data.get("subject_rate", 0)),
+            "formats": cleaned_formats,
+            "normal": normal_val,
+            "excel": excel_val,
+            "both": both_val,
+            "subject_rate": subject_rate,
             "bank_account": data.get("bank_account", ""),
             "ifsc": data.get("ifsc", ""),
             "phone": data.get("phone", ""),
@@ -717,7 +787,7 @@ def update_pricing():
         }},
         upsert=True
     )
-    return jsonify({"message": "Pricing updated"}), 200
+    return jsonify({"message": "Pricing updated", "formats": cleaned_formats}), 200
 
 
 @app.route('/api/files/<filename>', methods=['GET'])
@@ -808,6 +878,512 @@ def client_reapply():
     )
     
     return jsonify({"message": "Re-apply allowed"}), 200
+
+
+# ==========================================
+# EMAIL CENTRE MODULE - SUPER ADMIN PANEL
+# ==========================================
+
+import time
+import uuid
+import re
+from bson.objectid import ObjectId
+
+OFFER_LETTERS_FOLDER = os.path.join(UPLOAD_FOLDER, 'offer_letters')
+os.makedirs(OFFER_LETTERS_FOLDER, exist_ok=True)
+
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$')
+
+def text_to_html(text):
+    if not text:
+        return ""
+    # Automatically convert normal plain text newlines into clean HTML paragraphs
+    if not ("<p" in text or "<div" in text or "<br" in text or "<table" in text):
+        paras = text.strip().split("\n\n")
+        formatted_paras = []
+        for p in paras:
+            p_clean = p.replace("\n", "<br>")
+            formatted_paras.append(f"<p style='margin: 0 0 14px 0; line-height: 1.6;'>{p_clean}</p>")
+        return "".join(formatted_paras)
+    return text
+
+
+def is_valid_email(email):
+    return bool(email and isinstance(email, str) and EMAIL_REGEX.match(email.strip()))
+
+@app.route('/api/admin/email-centre/stats', methods=['GET'])
+def get_email_centre_stats():
+    db = get_db()
+    institutes_col = db['institutes']
+    logs_col = db['email_logs']
+    
+    total_institutes = institutes_col.count_documents({"status": {"$nin": ["removed"]}})
+    total_sent = logs_col.count_documents({})
+    delivered = logs_col.count_documents({"status": "Delivered"})
+    failed = logs_col.count_documents({"status": "Failed"})
+    
+    return jsonify({
+        "total_institutes": total_institutes,
+        "total_sent": total_sent,
+        "delivered": delivered,
+        "failed": failed
+    }), 200
+
+@app.route('/api/admin/email-centre/send-institutes', methods=['POST'])
+def email_centre_send_institutes():
+    db = get_db()
+    institutes_col = db['institutes']
+    logs_col = db['email_logs']
+
+    # Support both multipart form data (with optional attachment) and JSON
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        recipients_type = request.form.get('recipients_type', 'all')
+        selected_emails_raw = request.form.get('selected_emails', '')
+        subject = request.form.get('subject', '').strip()
+        message_html = request.form.get('message', '').strip()
+        show_logo = request.form.get('show_logo', 'true').lower() == 'true'
+        signature = request.form.get('signature', '').strip()
+        
+        attachment_file = request.files.get('attachment')
+        attachment_bytes = None
+        attachment_filename = None
+        if attachment_file and attachment_file.filename:
+            attachment_filename = secure_filename(attachment_file.filename)
+            attachment_bytes = attachment_file.read()
+    else:
+        data = request.json or {}
+        recipients_type = data.get('recipients_type', 'all')
+        selected_emails_raw = data.get('selected_emails', [])
+        subject = data.get('subject', '').strip()
+        message_html = data.get('message', '').strip()
+        show_logo = bool(data.get('show_logo', True))
+        signature = data.get('signature', '').strip()
+        attachment_bytes = None
+        attachment_filename = None
+
+    if not subject:
+        return jsonify({"error": "Email subject is required"}), 400
+    if not message_html:
+        return jsonify({"error": "Email message is required"}), 400
+
+    # Determine recipient institutes from database
+    recipients = []
+    if recipients_type == 'all':
+        query = {"status": {"$nin": ["removed"]}}
+        cursor = institutes_col.find(query, {"email": 1, "institute": 1})
+        for doc in cursor:
+            em = doc.get("email", "").strip().lower()
+            if is_valid_email(em):
+                recipients.append({
+                    "email": em,
+                    "name": doc.get("institute", {}).get("name", "Institute Partner")
+                })
+    else:
+        # Selected emails
+        if isinstance(selected_emails_raw, str):
+            email_list = [e.strip().lower() for e in selected_emails_raw.split(',') if e.strip()]
+        else:
+            email_list = [str(e).strip().lower() for e in selected_emails_raw if str(e).strip()]
+        
+        # Deduplicate
+        email_list = list(dict.fromkeys(email_list))
+        cursor = institutes_col.find({"email": {"$in": email_list}}, {"email": 1, "institute": 1})
+        found_map = {doc["email"].strip().lower(): doc.get("institute", {}).get("name", "Institute Partner") for doc in cursor if "email" in doc}
+        
+        for em in email_list:
+            if is_valid_email(em):
+                recipients.append({
+                    "email": em,
+                    "name": found_map.get(em, "Institute Partner")
+                })
+
+    if not recipients:
+        return jsonify({"error": "No valid recipients found"}), 400
+
+    results = []
+    sent_count = 0
+    fail_count = 0
+
+    for r in recipients:
+        email = r["email"]
+        name = r["name"]
+        
+        # Individualized personalized message support
+        personalized_body = text_to_html(message_html.replace("{{institute_name}}", name).replace("{{email}}", email))
+        
+        success, status_msg = send_email_ex(
+            to_email=email,
+            subject=subject,
+            body_html=personalized_body,
+            attachment_bytes=attachment_bytes,
+            filename=attachment_filename,
+            show_logo=show_logo,
+            signature=signature if signature else None
+        )
+        
+        status_str = "Delivered" if success else "Failed"
+        if success:
+            sent_count += 1
+        else:
+            fail_count += 1
+            
+        log_entry = {
+            "mode": "Institutes Announcement",
+            "recipient_name": name,
+            "recipient_email": email,
+            "subject": subject,
+            "status": status_str,
+            "failure_reason": "" if success else status_msg,
+            "has_attachment": bool(attachment_filename),
+            "timestamp": datetime.utcnow()
+        }
+        logs_col.insert_one(log_entry)
+        results.append({"email": email, "status": status_str})
+        
+        # Small delay between dispatches to respect SMTP limits
+        time.sleep(0.15)
+
+    return jsonify({
+        "message": f"Bulk email dispatch completed: {sent_count} sent, {fail_count} failed",
+        "total": len(recipients),
+        "sent": sent_count,
+        "failed": fail_count,
+        "results": results
+    }), 200
+
+@app.route('/api/admin/email-centre/preview-offer-pdf', methods=['POST'])
+def email_centre_preview_offer_pdf():
+    data = request.json or {}
+    employee_name = data.get('employee_name', 'Employee Name').strip()
+    position = data.get('position', 'Job Position').strip()
+    template = data.get('template', 'corporate')
+    
+    try:
+        pdf_bytes = generate_offer_letter_pdf(data, template=template)
+        from flask import Response
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f"inline; filename=Offer_Letter_{secure_filename(employee_name)}.pdf"}
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate PDF preview: {str(e)}"}), 500
+
+@app.route('/api/admin/email-centre/send-offer-letter', methods=['POST'])
+def email_centre_send_offer_letter():
+    data = request.json or {}
+    employee_name = data.get('employee_name', '').strip()
+    employee_email = data.get('employee_email', '').strip().lower()
+    position = data.get('position', '').strip()
+    template = data.get('template', 'corporate')
+    
+    # 1. Validation
+    if not employee_name:
+        return jsonify({"error": "Employee Full Name is required"}), 400
+    if not employee_email or not is_valid_email(employee_email):
+        return jsonify({"error": "A valid Employee Email Address is required"}), 400
+    if not position:
+        return jsonify({"error": "Offered Job Position is required"}), 400
+
+    db = get_db()
+    logs_col = db['email_logs']
+    offers_col = db['offer_letters']
+
+    # 2. Generate PDF
+    try:
+        clean_name = secure_filename(employee_name).replace(' ', '_')
+        pdf_filename = f"Offer_Letter_{int(time.time())}_{clean_name}.pdf"
+        pdf_filepath = os.path.join(OFFER_LETTERS_FOLDER, pdf_filename)
+        
+        generate_offer_letter_pdf(data, template=template, output_path=pdf_filepath)
+        with open(pdf_filepath, 'rb') as f:
+            pdf_bytes = f.read()
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate Offer Letter PDF: {str(e)}"}), 500
+
+    # 3. Create professional email content
+    company_name = data.get('company_name', 'IGYR - India Get Your Result')
+    deadline = data.get('deadline', '')
+    joining_date = data.get('joining_date', '')
+    salary = data.get('salary', '')
+    custom_message = data.get('custom_email_body', '').strip()
+    
+    subject = f"Official Job Offer Letter – {employee_name} – {position}"
+    
+    if custom_message:
+        email_content = custom_message
+    else:
+        email_content = f"""
+        <p style="font-size: 16px; margin-bottom: 12px;">Dear <strong>{employee_name}</strong>,</p>
+        <p style="font-size: 16px; color: #15803d; font-weight: bold; margin-bottom: 12px;">Congratulations!</p>
+        <p>We are pleased to officially offer you the position of <strong>{position}</strong> at <strong>{company_name}</strong>.</p>
+        <p>Please find your official offer letter attached to this email. It contains the comprehensive terms of your position, compensation package, joining date, and employment conditions.</p>
+        
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+            <h4 style="margin: 0 0 10px 0; color: #1e3a8a; font-size: 14px; text-transform: uppercase;">Key Offer Details:</h4>
+            <p style="margin: 4px 0;">• <strong>Position:</strong> {position}</p>
+            <p style="margin: 4px 0;">• <strong>Department:</strong> {data.get('department', 'Operations')}</p>
+            <p style="margin: 4px 0;">• <strong>Compensation:</strong> {salary if salary else 'As detailed in offer letter'}</p>
+            <p style="margin: 4px 0;">• <strong>Date of Joining:</strong> {joining_date if joining_date else 'To be scheduled'}</p>
+            {f'<p style="margin: 4px 0; color: #b91c1c;">• <strong>Acceptance Deadline:</strong> {deadline}</p>' if deadline else ''}
+        </div>
+
+        <p>Kindly review the attached offer letter carefully and confirm your formal acceptance by replying to this email with the signed copy by <strong>{deadline if deadline else 'the stipulated deadline'}</strong>.</p>
+        
+        <p>We look forward to welcoming you to our team!</p>
+        """
+
+    signature_html = f"""
+        <strong>HR & Recruitment Department</strong><br>
+        {company_name}<br>
+        <span style="color: #6b7280; font-size: 12px;">Confidential Recruitment Notice</span>
+    """
+
+    # 4. Dispatch Email with PDF attachment
+    success, status_msg = send_email_ex(
+        to_email=employee_email,
+        subject=subject,
+        body_html=email_content,
+        attachment_bytes=pdf_bytes,
+        filename=f"Offer_Letter_{clean_name}.pdf",
+        show_logo=True,
+        signature=signature_html
+    )
+
+    status_str = "Delivered" if success else "Failed"
+
+    # 5. Store record in offer_letters collection
+    offer_doc = {
+        "employee_name": employee_name,
+        "employee_email": employee_email,
+        "employee_phone": data.get('employee_phone', ''),
+        "position": position,
+        "department": data.get('department', ''),
+        "company_name": company_name,
+        "location": data.get('location', ''),
+        "salary": salary,
+        "joining_date": joining_date,
+        "deadline": deadline,
+        "template": template,
+        "pdf_filename": pdf_filename,
+        "status": status_str,
+        "failure_reason": "" if success else status_msg,
+        "created_at": datetime.utcnow()
+    }
+    inserted = offers_col.insert_one(offer_doc)
+
+    # 6. Store record in email_logs collection
+    log_entry = {
+        "mode": "Employee Offer Letter",
+        "recipient_name": employee_name,
+        "recipient_email": employee_email,
+        "subject": subject,
+        "status": status_str,
+        "failure_reason": "" if success else status_msg,
+        "offer_letter_id": str(inserted.inserted_id),
+        "has_attachment": True,
+        "timestamp": datetime.utcnow()
+    }
+    logs_col.insert_one(log_entry)
+
+    if not success:
+        return jsonify({"error": f"Offer letter generated, but email delivery failed: {status_msg}"}), 502
+
+    return jsonify({
+        "message": f"Offer letter generated and sent to {employee_email} successfully!",
+        "offer_id": str(inserted.inserted_id),
+        "pdf_url": f"/api/admin/email-centre/download-offer-pdf/{str(inserted.inserted_id)}"
+    }), 200
+
+@app.route('/api/admin/email-centre/download-offer-pdf/<letter_id>', methods=['GET'])
+def email_centre_download_offer_pdf(letter_id):
+    db = get_db()
+    offers_col = db['offer_letters']
+    
+    try:
+        offer = offers_col.find_one({"_id": ObjectId(letter_id)})
+    except Exception:
+        offer = None
+        
+    if not offer:
+        return jsonify({"error": "Offer letter not found"}), 404
+        
+    pdf_filename = offer.get("pdf_filename")
+    filepath = os.path.join(OFFER_LETTERS_FOLDER, pdf_filename)
+    if not os.path.exists(filepath):
+        # Regenerate on the fly if needed
+        try:
+            generate_offer_letter_pdf(offer, template=offer.get("template", "corporate"), output_path=filepath)
+        except Exception:
+            return jsonify({"error": "PDF file not found on server"}), 404
+
+    return send_from_directory(
+        OFFER_LETTERS_FOLDER,
+        pdf_filename,
+        as_attachment=True,
+        download_name=f"Offer_Letter_{secure_filename(offer.get('employee_name', 'Employee'))}.pdf"
+    )
+
+@app.route('/api/admin/email-centre/send-custom-institutes', methods=['POST'])
+def email_centre_send_custom_institutes():
+    db = get_db()
+    logs_col = db['email_logs']
+
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        import json
+        recipients_json = request.form.get('recipients', '[]')
+        try:
+            recipients = json.loads(recipients_json)
+        except Exception:
+            recipients = []
+            
+        send_type = request.form.get('type', 'template') # 'template' or 'custom'
+        common_subject = request.form.get('subject', '').strip()
+        common_message = request.form.get('message', '').strip()
+        show_logo = request.form.get('show_logo', 'true').lower() == 'true'
+        signature = request.form.get('signature', '').strip()
+        
+        attachment_file = request.files.get('attachment')
+        attachment_bytes = None
+        attachment_filename = None
+        if attachment_file and attachment_file.filename:
+            attachment_filename = secure_filename(attachment_file.filename)
+            attachment_bytes = attachment_file.read()
+    else:
+        data = request.json or {}
+        recipients = data.get('recipients', [])
+        send_type = data.get('type', 'template')
+        common_subject = data.get('subject', '').strip()
+        common_message = data.get('message', '').strip()
+        show_logo = bool(data.get('show_logo', True))
+        signature = data.get('signature', '').strip()
+        attachment_bytes = None
+        attachment_filename = None
+
+    if not recipients or not isinstance(recipients, list):
+        return jsonify({"error": "At least one recipient institute must be selected"}), 400
+
+    sent_count = 0
+    fail_count = 0
+    results = []
+
+    for r in recipients:
+        email = str(r.get('email', '')).strip().lower()
+        name = str(r.get('name', 'Institute Partner')).strip()
+        state = str(r.get('state', '')).strip()
+        district = str(r.get('district', '')).strip()
+        
+        if not is_valid_email(email):
+            continue
+
+        if send_type == 'custom':
+            sub = r.get('custom_subject', common_subject).strip() or common_subject
+            body = r.get('custom_message', common_message).strip() or common_message
+        else:
+            sub = common_subject
+            body = common_message
+
+        # Replace placeholders
+        body = text_to_html(body.replace("{{institute_name}}", name))
+        body = body.replace("{{email}}", email)
+        body = body.replace("{{state}}", state)
+        body = body.replace("{{district}}", district)
+        
+        sub = sub.replace("{{institute_name}}", name)
+
+        if not sub:
+            sub = "Important Update from IGYR"
+
+        success, status_msg = send_email_ex(
+            to_email=email,
+            subject=sub,
+            body_html=body,
+            attachment_bytes=attachment_bytes,
+            filename=attachment_filename,
+            show_logo=show_logo,
+            signature=signature if signature else None
+        )
+
+        status_str = "Delivered" if success else "Failed"
+        if success:
+            sent_count += 1
+        else:
+            fail_count += 1
+
+        log_entry = {
+            "mode": "Custom Institute Message",
+            "recipient_name": name,
+            "recipient_email": email,
+            "subject": sub,
+            "status": status_str,
+            "failure_reason": "" if success else status_msg,
+            "has_attachment": bool(attachment_filename),
+            "timestamp": datetime.utcnow()
+        }
+        logs_col.insert_one(log_entry)
+        results.append({"email": email, "status": status_str})
+        time.sleep(0.15)
+
+    return jsonify({
+        "message": f"Custom dispatch completed: {sent_count} sent, {fail_count} failed",
+        "total": len(recipients),
+        "sent": sent_count,
+        "failed": fail_count,
+        "results": results
+    }), 200
+
+@app.route('/api/admin/email-centre/history', methods=['GET'])
+def email_centre_get_history():
+    db = get_db()
+    logs_col = db['email_logs']
+    
+    mode_filter = request.args.get('mode', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    search = request.args.get('search', '').strip().lower()
+    
+    query = {}
+    if mode_filter and mode_filter != 'all':
+        query['mode'] = mode_filter
+    if status_filter and status_filter != 'all':
+        query['status'] = status_filter
+    if search:
+        query['$or'] = [
+            {"recipient_name": {"$regex": search, "$options": "i"}},
+            {"recipient_email": {"$regex": search, "$options": "i"}},
+            {"subject": {"$regex": search, "$options": "i"}}
+        ]
+
+    limit = int(request.args.get('limit', 100))
+    cursor = logs_col.find(query).sort("timestamp", -1).limit(limit)
+    
+    logs = []
+    for doc in cursor:
+        doc['id'] = str(doc.get('_id'))
+        del doc['_id']
+        if isinstance(doc.get('timestamp'), datetime):
+            doc['timestamp'] = doc['timestamp'].strftime("%Y-%m-%d %H:%M:%S")
+        logs.append(doc)
+
+    return jsonify({"logs": logs}), 200
+
+@app.route('/api/admin/email-centre/offer-letters', methods=['GET'])
+def email_centre_get_offer_letters():
+    db = get_db()
+    offers_col = db['offer_letters']
+    
+    cursor = offers_col.find({}).sort("created_at", -1).limit(50)
+    offers = []
+    for doc in cursor:
+        doc_id = str(doc.get('_id'))
+        doc['id'] = doc_id
+        doc['download_url'] = f"/api/admin/email-centre/download-offer-pdf/{doc_id}"
+        del doc['_id']
+        if isinstance(doc.get('created_at'), datetime):
+            doc['created_at'] = doc['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+        offers.append(doc)
+
+    return jsonify({"offers": offers}), 200
+
 
 if __name__ == '__main__':
     # Initialize DB connection on startup
