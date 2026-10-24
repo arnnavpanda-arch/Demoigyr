@@ -231,7 +231,7 @@ async function loadApplication() {
                                     <div class="flex flex-wrap gap-2">
                                         ${inst.details.batches.map(b => `
                                             <span class="bg-white border border-indigo-200 text-indigo-950 text-xs font-bold px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1.5">
-                                                <i class="fa-solid fa-book-bookmark text-indigo-500"></i> ${b.name}: <span class="text-indigo-600 font-mono">${b.students || 0} students</span>
+                                                <i class="fa-solid fa-book-bookmark text-indigo-500"></i> ${b.name}: <span class="text-indigo-600 font-mono">${b.students || 0} students</span> &bull; <span class="text-purple-600 font-mono">${b.subjects || 0} subjects</span>
                                             </span>
                                         `).join('')}
                                     </div>

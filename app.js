@@ -1277,14 +1277,23 @@ window.getFormatRate = function() {
     return fmt ? fmt.rate : 50;
 };
 
+window.getSubjectRate = function() {
+    return parseFloat(state.pricing?.subject_rate) || 0;
+};
+
 window.getFeeCalculationHtml = function() {
-    const rate = window.getFormatRate();
+    const formatRate = window.getFormatRate();
+    const subjectRate = window.getSubjectRate();
     const isMultiple = state.resultDetails.scope === 'multiple';
     
     if (isMultiple) {
         const batches = state.resultDetails.batches || [];
         const totalStudents = batches.reduce((acc, b) => acc + (parseInt(b.students) || 0), 0);
-        const totalFee = totalStudents * rate;
+        const totalSubjects = batches.reduce((acc, b) => acc + (parseInt(b.subjects) || 0), 0);
+        
+        const totalStudentFee = totalStudents * formatRate;
+        const totalSubjectFee = totalSubjects * subjectRate;
+        const totalFee = totalStudentFee + totalSubjectFee;
         
         return `
             <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-gray-700 gap-3">
@@ -1292,32 +1301,47 @@ window.getFeeCalculationHtml = function() {
                     <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider block mb-1">
                         <i class="fa-solid fa-calculator mr-1"></i> Live Multi-Result Fee Calculation
                     </span>
-                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
-                        <span>Total Students: <strong class="text-emerald-400 font-mono">${totalStudents}</strong></span>
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2 flex-wrap">
+                        <span>Students: <strong class="text-emerald-400 font-mono">${totalStudents}</strong></span>
+                        <span class="text-gray-500">&bull;</span>
+                        <span>Subjects: <strong class="text-purple-400 font-mono">${totalSubjects}</strong></span>
                         <span class="text-xs bg-indigo-900/80 text-indigo-200 border border-indigo-700 px-2.5 py-0.5 rounded-full font-sans">${batches.length} Classes</span>
                     </h3>
                 </div>
-                <div class="text-left md:text-right">
-                    <span class="text-xs text-gray-400 block">Rate for ${state.resultDetails.option || 'Format'}:</span>
-                    <span class="text-base font-bold text-white font-mono">₹${rate} <span class="text-xs font-normal text-gray-400">/ student</span></span>
+                <div class="text-left md:text-right text-xs text-gray-300">
+                    <div>Format: <strong class="text-white">${state.resultDetails.option || 'Format'}</strong> (₹${formatRate}/stu)</div>
+                    <div class="mt-0.5">Subject Add-on: <strong class="text-purple-300 font-mono">₹${subjectRate}</strong>/subject</div>
                 </div>
             </div>
 
             <div class="py-4">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2.5">Per-Class Fee Breakdown:</span>
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2.5">Per-Class Fee Breakdown (Students + Subjects):</span>
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                     ${batches.map((b, idx) => {
                         const s = parseInt(b.students) || 0;
-                        const subTotal = s * rate;
+                        const sub = parseInt(b.subjects) || 0;
+                        const stuSubtotal = s * formatRate;
+                        const subSubtotal = sub * subjectRate;
+                        const batchTotal = stuSubtotal + subSubtotal;
                         return `
-                            <div class="bg-gray-800/90 p-3 rounded-xl border border-gray-700/80 flex flex-col justify-between shadow-xs">
-                                <div class="flex items-center justify-between mb-1.5">
-                                    <span class="font-bold text-sm text-gray-200 truncate">${b.name || 'Class ' + (idx + 1)}</span>
-                                    <span class="text-xs text-gray-400 font-mono">${s} stu</span>
+                            <div class="bg-gray-800/90 p-3.5 rounded-xl border border-gray-700/80 flex flex-col justify-between shadow-xs">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="font-bold text-sm text-gray-100 truncate">${b.name || 'Class ' + (idx + 1)}</span>
+                                    <span class="text-xs bg-gray-700 px-2 py-0.5 rounded text-gray-300 font-mono">${s} stu &bull; ${sub} subj</span>
                                 </div>
-                                <div class="text-right pt-1.5 border-t border-gray-700/50 flex justify-between items-center text-xs">
-                                    <span class="text-gray-400 font-mono">${s} × ₹${rate} = </span>
-                                    <span class="font-bold text-emerald-400 font-mono text-sm">₹${subTotal.toLocaleString('en-IN')}</span>
+                                <div class="space-y-1 text-xs text-gray-400 pt-2 border-t border-gray-700/50">
+                                    <div class="flex justify-between">
+                                        <span>Students (${s} × ₹${formatRate}):</span>
+                                        <span class="text-gray-200 font-mono">₹${stuSubtotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span>Subjects (${sub} × ₹${subjectRate}):</span>
+                                        <span class="text-purple-300 font-mono">₹${subSubtotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div class="flex justify-between pt-1 border-t border-gray-700/30 font-bold">
+                                        <span class="text-gray-300">Class Total:</span>
+                                        <span class="text-emerald-400 font-mono text-sm">₹${batchTotal.toLocaleString('en-IN')}</span>
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -1325,10 +1349,22 @@ window.getFeeCalculationHtml = function() {
                 </div>
             </div>
 
-            <div class="pt-4 border-t border-gray-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <!-- Summary Totals Row -->
+            <div class="py-3 px-4 bg-gray-800/60 rounded-xl border border-gray-700/60 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                <div class="flex items-center gap-4 flex-wrap">
+                    <span class="text-gray-300">Total Students Fee: <strong class="text-white font-mono">₹${totalStudentFee.toLocaleString('en-IN')}</strong> (${totalStudents} × ₹${formatRate})</span>
+                    <span class="text-gray-500">|</span>
+                    <span class="text-gray-300">Total Subjects Fee: <strong class="text-purple-300 font-mono">₹${totalSubjectFee.toLocaleString('en-IN')}</strong> (${totalSubjects} × ₹${subjectRate})</span>
+                </div>
+                <div class="text-gray-400 text-[11px]">
+                    <i class="fa-solid fa-circle-info text-blue-400 mr-1"></i> All rates auto-calculated from active pricing
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-3">
                 <div class="text-xs text-gray-400 flex items-start gap-2.5 max-w-xl">
                     <i class="fa-solid fa-circle-check text-indigo-400 mt-0.5 text-base flex-shrink-0"></i>
-                    <span class="leading-relaxed"><strong class="text-gray-200">Separate Class Submissions:</strong> After order confirmation, you will submit a separate marksheet file for each class (File 1: ${batches[0]?.name || '8th'}, File 2: ${batches[1]?.name || '9th'}, etc.). Admin will verify and email separate draft Tabulation Registers for all classes directly to your email.</span>
+                    <span class="leading-relaxed"><strong class="text-gray-200">Separate Class Submissions:</strong> After order confirmation, you will submit a separate marksheet file for each class. Admin will verify and email separate draft Tabulation Registers for all classes directly to your email.</span>
                 </div>
                 <div class="text-left sm:text-right flex-shrink-0 bg-gray-800/80 p-3 rounded-xl border border-gray-700 sm:border-0 sm:bg-transparent sm:p-0">
                     <span class="text-xs text-gray-400 uppercase font-bold tracking-wider block">Combined Total Fee</span>
@@ -1338,20 +1374,52 @@ window.getFeeCalculationHtml = function() {
         `;
     } else {
         const totalStudents = parseInt(state.resultDetails.totalStudents) || 0;
-        const totalFee = totalStudents * rate;
+        const totalSubjects = parseInt(state.resultDetails.totalSubjects) || 0;
+        const studentFee = totalStudents * formatRate;
+        const subjectFee = totalSubjects * subjectRate;
+        const totalFee = studentFee + subjectFee;
         
         return `
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-gray-700 gap-3">
                 <div>
                     <span class="text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">
                         <i class="fa-solid fa-calculator mr-1"></i> Live Single-Result Fee Calculation
                     </span>
-                    <h3 class="text-lg font-bold text-white">
-                        ${totalStudents > 0 ? `${totalStudents} Students × ₹${rate} / student` : 'Enter student count above to see calculation'}
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2 flex-wrap">
+                        <span>Students: <strong class="text-emerald-400 font-mono">${totalStudents}</strong></span>
+                        <span class="text-gray-500">&bull;</span>
+                        <span>Subjects: <strong class="text-purple-400 font-mono">${totalSubjects}</strong></span>
                     </h3>
-                    <p class="text-xs text-gray-400 mt-0.5">Format: <strong class="text-gray-200">${state.resultDetails.option || 'Normal Tabulation'}</strong></p>
                 </div>
-                <div class="text-left md:text-right flex-shrink-0">
+                <div class="text-left md:text-right text-xs text-gray-300">
+                    <div>Format: <strong class="text-white">${state.resultDetails.option || 'Normal Tabulation'}</strong> (₹${formatRate}/stu)</div>
+                    <div class="mt-0.5">Subject Add-on: <strong class="text-purple-300 font-mono">₹${subjectRate}</strong>/subject</div>
+                </div>
+            </div>
+
+            <div class="py-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700/80 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs text-gray-400 block font-medium">Students Base Cost</span>
+                        <span class="text-sm font-bold text-white">${totalStudents} Students &times; ₹${formatRate}</span>
+                    </div>
+                    <span class="text-lg font-bold text-emerald-400 font-mono">₹${studentFee.toLocaleString('en-IN')}</span>
+                </div>
+
+                <div class="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700/80 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs text-gray-400 block font-medium">Total Subjects Cost</span>
+                        <span class="text-sm font-bold text-white">${totalSubjects} Subjects &times; ₹${subjectRate}</span>
+                    </div>
+                    <span class="text-lg font-bold text-purple-400 font-mono">₹${subjectFee.toLocaleString('en-IN')}</span>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-gray-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div class="text-xs text-gray-400">
+                    ${totalStudents > 0 ? `<i class="fa-solid fa-circle-check text-green-400 mr-1.5"></i> Base Cost (₹${studentFee}) + Subject Cost (₹${subjectFee}) = Total Fee` : 'Enter student count and subject count above to see calculation'}
+                </div>
+                <div class="text-left sm:text-right flex-shrink-0">
                     <span class="text-xs text-gray-400 uppercase font-bold tracking-wider block">Total Estimated Fee</span>
                     <span class="text-3xl font-black text-emerald-400 font-mono">₹${totalFee.toLocaleString('en-IN')}</span>
                 </div>
@@ -1461,7 +1529,7 @@ function getNextStepsView() {
                             </div>
                             <div>
                                 <label class="block text-sm font-semibold text-gray-700 mb-2">Total Subjects</label>
-                                <input required type="number" min="1" id="res-subjects" value="${state.resultDetails.totalSubjects || ''}" oninput="state.resultDetails.totalSubjects = this.value;" placeholder="e.g. 6" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white transition-colors" />
+                                <input required type="number" min="1" id="res-subjects" value="${state.resultDetails.totalSubjects || ''}" oninput="state.resultDetails.totalSubjects = this.value; window.updateFeeDisplay();" placeholder="e.g. 6" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white transition-colors" />
                             </div>
                         </div>
                     </div>
@@ -1535,7 +1603,8 @@ function getNextStepsView() {
 }
 
 function getPaymentView() {
-    const rate = window.getFormatRate ? window.getFormatRate() : 50;
+    const formatRate = window.getFormatRate ? window.getFormatRate() : 50;
+    const subjectRate = window.getSubjectRate ? window.getSubjectRate() : 0;
     const isMultiple = state.resultDetails.scope === 'multiple';
     
     let summaryHtml = '';
@@ -1544,7 +1613,10 @@ function getPaymentView() {
     if (isMultiple) {
         const batches = state.resultDetails.batches || [];
         const totalStudents = batches.reduce((acc, b) => acc + (parseInt(b.students) || 0), 0);
-        totalFee = totalStudents * rate;
+        const totalSubjects = batches.reduce((acc, b) => acc + (parseInt(b.subjects) || 0), 0);
+        const totalStudentFee = totalStudents * formatRate;
+        const totalSubjectFee = totalSubjects * subjectRate;
+        totalFee = totalStudentFee + totalSubjectFee;
         
         summaryHtml = `
             <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 mb-6 text-left">
@@ -1556,24 +1628,30 @@ function getPaymentView() {
                 </div>
                 
                 <div class="space-y-2 mb-3">
-                    ${batches.map((b, idx) => `
-                        <div class="flex justify-between text-xs text-gray-700 bg-white p-2.5 rounded-lg border border-indigo-100">
+                    ${batches.map((b, idx) => {
+                        const s = parseInt(b.students) || 0;
+                        const sub = parseInt(b.subjects) || 0;
+                        const bTotal = (s * formatRate) + (sub * subjectRate);
+                        return `
+                        <div class="flex justify-between items-center text-xs text-gray-700 bg-white p-2.5 rounded-lg border border-indigo-100">
                             <div>
                                 <span class="font-bold text-gray-900 block">${b.name || 'Class ' + (idx + 1)}</span>
-                                <span class="text-[11px] text-gray-500">${b.students || 0} Students &bull; Target: ${b.examDate || 'N/A'}</span>
+                                <span class="text-[11px] text-gray-500">${s} Students &bull; ${sub} Subjects &bull; Date: ${b.examDate || 'N/A'}</span>
                             </div>
-                            <span class="font-bold font-mono text-indigo-700 text-xs">₹${((parseInt(b.students) || 0) * rate).toLocaleString('en-IN')}</span>
+                            <span class="font-bold font-mono text-indigo-700 text-xs">₹${bTotal.toLocaleString('en-IN')}</span>
                         </div>
-                    `).join('')}
+                    `;}).join('')}
                 </div>
                 
-                <div class="pt-2 border-t border-indigo-200 flex justify-between items-center text-xs text-gray-600">
-                    <span>Total Aggregated Students:</span>
-                    <span class="font-bold text-gray-900 font-mono">${totalStudents} Students</span>
-                </div>
-                <div class="flex justify-between items-center text-xs text-gray-600 mt-1">
-                    <span>Selected Format:</span>
-                    <span class="font-bold text-gray-900">${state.resultDetails.option} (₹${rate}/stu)</span>
+                <div class="pt-2 border-t border-indigo-200 space-y-1 text-xs text-gray-600">
+                    <div class="flex justify-between items-center">
+                        <span>Students Base Charge (${totalStudents} × ₹${formatRate}):</span>
+                        <span class="font-bold text-gray-900 font-mono">₹${totalStudentFee.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span>Subjects Charge (${totalSubjects} × ₹${subjectRate}):</span>
+                        <span class="font-bold text-purple-700 font-mono">₹${totalSubjectFee.toLocaleString('en-IN')}</span>
+                    </div>
                 </div>
                 <div class="flex justify-between items-center text-base font-black text-indigo-900 mt-3 pt-3 border-t border-indigo-200">
                     <span>Combined Total Fee:</span>
@@ -1584,7 +1662,10 @@ function getPaymentView() {
         `;
     } else {
         const totalStudents = parseInt(state.resultDetails.totalStudents) || 0;
-        totalFee = totalStudents * rate;
+        const totalSubjects = parseInt(state.resultDetails.totalSubjects) || 0;
+        const studentFee = totalStudents * formatRate;
+        const subjectFee = totalSubjects * subjectRate;
+        totalFee = studentFee + subjectFee;
         
         summaryHtml = `
             <div class="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-6 text-left">
@@ -1593,8 +1674,12 @@ function getPaymentView() {
                     <span class="font-bold text-gray-900">${state.resultDetails.option}</span>
                 </div>
                 <div class="flex justify-between items-center text-sm mb-2">
-                    <span class="text-gray-600">Total Students:</span>
-                    <span class="font-bold text-gray-900 font-mono">${totalStudents}</span>
+                    <span class="text-gray-600">Students Base Cost:</span>
+                    <span class="font-bold text-gray-900 font-mono">${totalStudents} Students &times; ₹${formatRate} = ₹${studentFee.toLocaleString('en-IN')}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm mb-2">
+                    <span class="text-gray-600">Subjects Cost:</span>
+                    <span class="font-bold text-purple-700 font-mono">${totalSubjects} Subjects &times; ₹${subjectRate} = ₹${subjectFee.toLocaleString('en-IN')}</span>
                 </div>
                 <div class="flex justify-between items-center text-sm mb-2">
                     <span class="text-gray-600">Publish Date:</span>
@@ -2000,9 +2085,10 @@ function attachEventListeners() {
                     }
                 }
                 const totalStudents = batches.reduce((sum, b) => sum + (parseInt(b.students) || 0), 0);
+                const totalSubjects = batches.reduce((sum, b) => sum + (parseInt(b.subjects) || 0), 0);
                 state.resultDetails.totalStudents = totalStudents.toString();
+                state.resultDetails.totalSubjects = totalSubjects.toString();
                 state.resultDetails.examDate = batches[0].examDate || '';
-                state.resultDetails.totalSubjects = batches[0].subjects || '';
             } else {
                 const sEl = document.getElementById('res-students');
                 const dEl = document.getElementById('res-date');

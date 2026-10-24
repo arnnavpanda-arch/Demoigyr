@@ -473,15 +473,26 @@ def admin_approve_format():
     
     details = inst.get("details", {})
     option = details.get("option", "normal")
-    try:
-        students = int(details.get("totalStudents", 0))
-    except ValueError:
-        students = 0
-        
-    try:
-        subjects = int(details.get("totalSubjects", 0))
-    except ValueError:
-        subjects = 0
+    batches = details.get("batches", [])
+    if details.get("scope") == "multiple" and batches:
+        try:
+            students = sum(int(b.get("students", 0) or 0) for b in batches)
+        except Exception:
+            students = int(details.get("totalStudents", 0) or 0)
+        try:
+            subjects = sum(int(b.get("subjects", 0) or 0) for b in batches)
+        except Exception:
+            subjects = int(details.get("totalSubjects", 0) or 0)
+    else:
+        try:
+            students = int(details.get("totalStudents", 0))
+        except (ValueError, TypeError):
+            students = 0
+            
+        try:
+            subjects = int(details.get("totalSubjects", 0))
+        except (ValueError, TypeError):
+            subjects = 0
         
     price_per = None
     formats = pricing.get("formats", [])
