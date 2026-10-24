@@ -716,7 +716,7 @@ function renderPublishList(institutes) {
         html += `
             <div class="border rounded-lg p-4 flex flex-col md:flex-row justify-between items-center gap-4 bg-gray-50 hover:bg-pink-50 transition-colors">
                 <div>
-                    <h4 class="font-bold text-gray-800 text-lg">${inst.name || 'Unknown'}</h4>
+                    <h4 class="font-bold text-gray-800 text-lg">${inst.institute?.name || inst.name || 'Unknown Institute'}</h4>
                     <p class="text-sm text-gray-600"><i class="fa-solid fa-envelope mr-1"></i> ${inst.email}</p>
                     <p class="text-xs font-semibold text-emerald-600 mt-1"><i class="fa-solid fa-circle-check mr-1"></i> Tabulation Register Approved by Institute</p>
                 </div>
@@ -1277,9 +1277,7 @@ window.previewM3Email = function() {
     }
     
     let subject = document.getElementById('m3-subject')?.value.trim() || 'Notice for {{institute_name}}';
-    let message = document.getElementById('m3-message')?.value.trim() || 'Dear {{institute_name}},
-
-This is a customized message.';
+    let message = document.getElementById('m3-message')?.value.trim() || 'Dear {{institute_name}},\n\nThis is a customized message.';
     
     subject = subject.replace(/{{institute_name}}/g, sample.name).replace(/{{email}}/g, sample.email).replace(/{{state}}/g, sample.state).replace(/{{district}}/g, sample.district);
     message = message.replace(/{{institute_name}}/g, sample.name).replace(/{{email}}/g, sample.email).replace(/{{state}}/g, sample.state).replace(/{{district}}/g, sample.district);
