@@ -20,7 +20,18 @@ const state = {
     email: savedEmail,
     isNewUser: false,
     instituteData: { name: '', type: '', state: '', district: '', mobile: '', address: '' },
-    resultDetails: { totalStudents: '', examDate: '', totalSubjects: '', option: 'normal' },
+    resultDetails: { 
+        scope: 'single', 
+        totalStudents: '', 
+        examDate: '', 
+        totalSubjects: '', 
+        option: 'normal',
+        batches: [
+            { name: 'Class 8th', students: '', examDate: '', subjects: '' },
+            { name: 'Class 9th', students: '', examDate: '', subjects: '' },
+            { name: 'Class 10th', students: '', examDate: '', subjects: '' }
+        ]
+    },
     errorMsg: '',
     pricing: {normal: 50, excel: 100, both: 150}
 };
@@ -697,41 +708,100 @@ function getDashboardView() {
     
     let requiredFilesHtml = '';
     if(appStatus === 'documents_required') {
+        const isMultiple = details.scope === 'multiple' && details.batches && details.batches.length > 0;
         let docs = 'PDF Document (Normal Tabulation)';
         if(details.option === 'excel') docs = 'Excel Data Sheet';
         if(details.option === 'excel_admit') docs = 'Excel Data Sheet + Admit Card Details (Merged)';
         
-        requiredFilesHtml = `
-            <div class="mt-6 p-5 border border-purple-200 bg-purple-50 rounded-xl shadow-sm">
-                <h4 class="font-bold text-purple-800 mb-2"><i class="fa-solid fa-envelope-open-text mr-2"></i> Action Required: Email Data</h4>
-                <p class="text-sm text-gray-600 mb-4">Admin requires: <strong class="text-gray-800">${docs}</strong></p>
-                <div class="flex flex-col md:flex-row items-center gap-3">
-                    <input type="file" id="file-upload" class="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200"/>
-                    <button id="btn-upload" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-lg text-sm transition-colors shadow-sm w-full md:w-auto flex items-center justify-center">
-                        <i class="fa-solid fa-paper-plane mr-2"></i> Send securely via Email
+        if (isMultiple) {
+            requiredFilesHtml = `
+                <div class="mt-6 p-6 border-2 border-indigo-200 bg-indigo-50/70 rounded-2xl shadow-sm">
+                    <div class="flex items-center justify-between mb-3 border-b border-indigo-200 pb-3 flex-wrap gap-2">
+                        <div>
+                            <h4 class="font-bold text-indigo-900 text-lg flex items-center">
+                                <i class="fa-solid fa-layer-group text-indigo-600 mr-2"></i> Submit Class Documents (${details.batches.length} Separate Files Required)
+                            </h4>
+                            <p class="text-xs text-gray-600 mt-0.5">Admin requires: <strong class="text-gray-800">${details.option || docs}</strong> for each individual class/batch.</p>
+                        </div>
+                        <span class="bg-indigo-600 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-xs">Multiple Results</span>
+                    </div>
+                    
+                    <p class="text-xs text-gray-600 mb-4 font-medium">Please select the specific data/marksheet document for each class separately (e.g. File 1: ${details.batches[0]?.name || '8th'}, File 2: ${details.batches[1]?.name || '9th'}, etc.):</p>
+                    
+                    <div class="space-y-3 mb-5">
+                        ${details.batches.map((b, idx) => `
+                            <div class="bg-white p-4 rounded-xl border border-indigo-200 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-800 font-bold flex items-center justify-center text-xs border border-indigo-200">${idx + 1}</span>
+                                    <div>
+                                        <span class="font-bold text-gray-800 text-sm block">${b.name || 'Class ' + (idx + 1)}</span>
+                                        <span class="text-xs text-gray-500">${b.students || 0} Students &bull; Target: ${b.examDate || 'N/A'}</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 md:max-w-md">
+                                    <input type="file" id="batch-file-${idx}" class="w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 cursor-pointer" required />
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <button id="btn-upload-multiple" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-6 rounded-xl text-sm transition-all shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-paper-plane mr-2"></i> Submit All ${details.batches.length} Class Files Securely via Email
                     </button>
+                    <p class="text-xs text-indigo-800 mt-3 font-medium"><i class="fa-solid fa-shield-halved mr-1"></i> Security Notice: For confidentiality, these files are NOT permanently saved on our web servers. They are directly transmitted to the Admin's secure inbox and purged immediately.</p>
                 </div>
-                <p class="text-xs text-purple-600 mt-3 font-medium"><i class="fa-solid fa-circle-info mr-1"></i> For total security, this file is NEVER saved on our servers. It is directly forwarded to the Admin's private email inbox and immediately deleted from our system.</p>
-            </div>
-        `;
+            `;
+        } else {
+            requiredFilesHtml = `
+                <div class="mt-6 p-5 border border-purple-200 bg-purple-50 rounded-xl shadow-sm">
+                    <h4 class="font-bold text-purple-800 mb-2"><i class="fa-solid fa-envelope-open-text mr-2"></i> Action Required: Email Data</h4>
+                    <p class="text-sm text-gray-600 mb-4">Admin requires: <strong class="text-gray-800">${docs}</strong></p>
+                    <div class="flex flex-col md:flex-row items-center gap-3">
+                        <input type="file" id="file-upload" class="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200"/>
+                        <button id="btn-upload" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-lg text-sm transition-colors shadow-sm w-full md:w-auto flex items-center justify-center">
+                            <i class="fa-solid fa-paper-plane mr-2"></i> Send securely via Email
+                        </button>
+                    </div>
+                    <p class="text-xs text-purple-600 mt-3 font-medium"><i class="fa-solid fa-circle-info mr-1"></i> For total security, this file is NEVER saved on our servers. It is directly forwarded to the Admin's private email inbox and immediately deleted from our system.</p>
+                </div>
+            `;
+        }
     }
     
     let verificationHtml = '';
     if(appStatus === 'verification_pending') {
-        verificationHtml = `
-            <div class="mt-6 p-5 border border-orange-200 bg-orange-50 rounded-xl shadow-sm text-center">
-                <i class="fa-solid fa-envelope-open-text text-4xl text-orange-500 mb-3"></i>
-                <h4 class="text-xl font-bold text-orange-800 mb-2">Check Your Email</h4>
-                <p class="text-sm text-gray-600 mb-4 font-medium">The Admin has generated your Draft Tabulation Register and sent it securely to your registered email address <strong>(${state.email})</strong>.</p>
-                <div class="bg-white p-4 rounded border border-orange-100 mb-5 shadow-sm text-left text-sm text-gray-700">
-                    <i class="fa-solid fa-circle-info text-blue-500 mr-2"></i> Open your email inbox, review the attached PDF/Excel file, and then return here to authorize the final publication.
+        const isMultiple = details.scope === 'multiple' && details.batches && details.batches.length > 0;
+        if (isMultiple) {
+            verificationHtml = `
+                <div class="mt-6 p-6 border-2 border-orange-200 bg-orange-50 rounded-2xl shadow-sm text-center">
+                    <i class="fa-solid fa-envelope-open-text text-4xl text-orange-500 mb-3"></i>
+                    <h4 class="text-xl font-bold text-orange-800 mb-1">Check Your Email (Multiple Tabulation Registers)</h4>
+                    <p class="text-sm text-gray-600 mb-4 font-medium">The Admin has prepared the Draft Tabulation Registers for all <strong>${details.batches.length} classes</strong> (${details.batches.map(b => b.name).join(', ')}) and emailed them as <strong>separate attachments</strong> to your registered address <strong>(${state.email})</strong>.</p>
+                    <div class="bg-white p-4 rounded-xl border border-orange-100 mb-5 shadow-sm text-left text-sm text-gray-700">
+                        <i class="fa-solid fa-circle-info text-blue-500 mr-2"></i> Open your email inbox, inspect each separate attached register file, and then return here to approve or request corrections.
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button id="btn-verify-approve" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-sm transition-colors flex items-center justify-center"><i class="fa-solid fa-check mr-2"></i> Approve All Tabulations</button>
+                        <button id="btn-verify-reject" class="flex-1 bg-red-100 hover:bg-red-600 text-red-600 hover:text-white font-bold py-3.5 rounded-xl border border-red-200 shadow-sm transition-colors flex items-center justify-center"><i class="fa-solid fa-xmark mr-2"></i> Reject (Changes Needed)</button>
+                    </div>
                 </div>
-                <div class="flex gap-3">
-                    <button id="btn-verify-approve" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-sm transition-colors"><i class="fa-solid fa-check mr-2"></i> Approve Tabulation</button>
-                    <button id="btn-verify-reject" class="flex-1 bg-red-100 hover:bg-red-600 text-red-600 hover:text-white font-bold py-3 rounded-lg border border-red-200 shadow-sm transition-colors"><i class="fa-solid fa-xmark mr-2"></i> Reject (Changes Needed)</button>
+            `;
+        } else {
+            verificationHtml = `
+                <div class="mt-6 p-5 border border-orange-200 bg-orange-50 rounded-xl shadow-sm text-center">
+                    <i class="fa-solid fa-envelope-open-text text-4xl text-orange-500 mb-3"></i>
+                    <h4 class="text-xl font-bold text-orange-800 mb-2">Check Your Email</h4>
+                    <p class="text-sm text-gray-600 mb-4 font-medium">The Admin has generated your Draft Tabulation Register and sent it securely to your registered email address <strong>(${state.email})</strong>.</p>
+                    <div class="bg-white p-4 rounded border border-orange-100 mb-5 shadow-sm text-left text-sm text-gray-700">
+                        <i class="fa-solid fa-circle-info text-blue-500 mr-2"></i> Open your email inbox, review the attached PDF/Excel file, and then return here to authorize the final publication.
+                    </div>
+                    <div class="flex gap-3">
+                        <button id="btn-verify-approve" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-sm transition-colors"><i class="fa-solid fa-check mr-2"></i> Approve Tabulation</button>
+                        <button id="btn-verify-reject" class="flex-1 bg-red-100 hover:bg-red-600 text-red-600 hover:text-white font-bold py-3 rounded-lg border border-red-200 shadow-sm transition-colors"><i class="fa-solid fa-xmark mr-2"></i> Reject (Changes Needed)</button>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
     }
     
     let paymentTrackerHtml = '';
@@ -1151,6 +1221,152 @@ function getDashboardView() {
 }
 
 
+window.setResultScope = function(scope) {
+    state.resultDetails.scope = scope;
+    if (scope === 'multiple') {
+        if (!state.resultDetails.batches || state.resultDetails.batches.length === 0) {
+            state.resultDetails.batches = [
+                { name: 'Class 8th', students: '', examDate: state.resultDetails.examDate || '', subjects: state.resultDetails.totalSubjects || '' },
+                { name: 'Class 9th', students: '', examDate: state.resultDetails.examDate || '', subjects: state.resultDetails.totalSubjects || '' },
+                { name: 'Class 10th', students: '', examDate: state.resultDetails.examDate || '', subjects: state.resultDetails.totalSubjects || '' }
+            ];
+        }
+    }
+    render();
+};
+
+window.addBatchRow = function() {
+    if (!state.resultDetails.batches) state.resultDetails.batches = [];
+    const count = state.resultDetails.batches.length;
+    let nextName = `Class ${count + 8}th`;
+    if (count === 3) nextName = 'Class 11th';
+    else if (count === 4) nextName = 'Class 12th';
+    else if (count >= 5) nextName = `Batch ${count + 1}`;
+    
+    state.resultDetails.batches.push({
+        name: nextName,
+        students: '',
+        examDate: state.resultDetails.examDate || '',
+        subjects: state.resultDetails.totalSubjects || ''
+    });
+    render();
+};
+
+window.removeBatchRow = function(index) {
+    if (state.resultDetails.batches && state.resultDetails.batches.length > 1) {
+        state.resultDetails.batches.splice(index, 1);
+        render();
+    }
+};
+
+window.updateBatchField = function(index, field, value) {
+    if (state.resultDetails.batches && state.resultDetails.batches[index]) {
+        state.resultDetails.batches[index][field] = value;
+        window.updateFeeDisplay();
+    }
+};
+
+window.getFormatRate = function() {
+    const rawFormats = state.pricing?.formats;
+    const formats = (rawFormats && rawFormats.length > 0) ? rawFormats : [
+        { name: "Normal Tabulation", rate: state.pricing?.normal || 50 },
+        { name: "Excel Sheet", rate: state.pricing?.excel || 100 },
+        { name: "Admit card + Any type of Tabulation", rate: state.pricing?.both || 150 }
+    ];
+    const fmt = formats.find(f => f.name === state.resultDetails.option) || formats[0];
+    return fmt ? fmt.rate : 50;
+};
+
+window.getFeeCalculationHtml = function() {
+    const rate = window.getFormatRate();
+    const isMultiple = state.resultDetails.scope === 'multiple';
+    
+    if (isMultiple) {
+        const batches = state.resultDetails.batches || [];
+        const totalStudents = batches.reduce((acc, b) => acc + (parseInt(b.students) || 0), 0);
+        const totalFee = totalStudents * rate;
+        
+        return `
+            <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-gray-700 gap-3">
+                <div>
+                    <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider block mb-1">
+                        <i class="fa-solid fa-calculator mr-1"></i> Live Multi-Result Fee Calculation
+                    </span>
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span>Total Students: <strong class="text-emerald-400 font-mono">${totalStudents}</strong></span>
+                        <span class="text-xs bg-indigo-900/80 text-indigo-200 border border-indigo-700 px-2.5 py-0.5 rounded-full font-sans">${batches.length} Classes</span>
+                    </h3>
+                </div>
+                <div class="text-left md:text-right">
+                    <span class="text-xs text-gray-400 block">Rate for ${state.resultDetails.option || 'Format'}:</span>
+                    <span class="text-base font-bold text-white font-mono">₹${rate} <span class="text-xs font-normal text-gray-400">/ student</span></span>
+                </div>
+            </div>
+
+            <div class="py-4">
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2.5">Per-Class Fee Breakdown:</span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    ${batches.map((b, idx) => {
+                        const s = parseInt(b.students) || 0;
+                        const subTotal = s * rate;
+                        return `
+                            <div class="bg-gray-800/90 p-3 rounded-xl border border-gray-700/80 flex flex-col justify-between shadow-xs">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <span class="font-bold text-sm text-gray-200 truncate">${b.name || 'Class ' + (idx + 1)}</span>
+                                    <span class="text-xs text-gray-400 font-mono">${s} stu</span>
+                                </div>
+                                <div class="text-right pt-1.5 border-t border-gray-700/50 flex justify-between items-center text-xs">
+                                    <span class="text-gray-400 font-mono">${s} × ₹${rate} = </span>
+                                    <span class="font-bold text-emerald-400 font-mono text-sm">₹${subTotal.toLocaleString('en-IN')}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div class="text-xs text-gray-400 flex items-start gap-2.5 max-w-xl">
+                    <i class="fa-solid fa-circle-check text-indigo-400 mt-0.5 text-base flex-shrink-0"></i>
+                    <span class="leading-relaxed"><strong class="text-gray-200">Separate Class Submissions:</strong> After order confirmation, you will submit a separate marksheet file for each class (File 1: ${batches[0]?.name || '8th'}, File 2: ${batches[1]?.name || '9th'}, etc.). Admin will verify and email separate draft Tabulation Registers for all classes directly to your email.</span>
+                </div>
+                <div class="text-left sm:text-right flex-shrink-0 bg-gray-800/80 p-3 rounded-xl border border-gray-700 sm:border-0 sm:bg-transparent sm:p-0">
+                    <span class="text-xs text-gray-400 uppercase font-bold tracking-wider block">Combined Total Fee</span>
+                    <span class="text-3xl font-black text-emerald-400 font-mono">₹${totalFee.toLocaleString('en-IN')}</span>
+                </div>
+            </div>
+        `;
+    } else {
+        const totalStudents = parseInt(state.resultDetails.totalStudents) || 0;
+        const totalFee = totalStudents * rate;
+        
+        return `
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <span class="text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">
+                        <i class="fa-solid fa-calculator mr-1"></i> Live Single-Result Fee Calculation
+                    </span>
+                    <h3 class="text-lg font-bold text-white">
+                        ${totalStudents > 0 ? `${totalStudents} Students × ₹${rate} / student` : 'Enter student count above to see calculation'}
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-0.5">Format: <strong class="text-gray-200">${state.resultDetails.option || 'Normal Tabulation'}</strong></p>
+                </div>
+                <div class="text-left md:text-right flex-shrink-0">
+                    <span class="text-xs text-gray-400 uppercase font-bold tracking-wider block">Total Estimated Fee</span>
+                    <span class="text-3xl font-black text-emerald-400 font-mono">₹${totalFee.toLocaleString('en-IN')}</span>
+                </div>
+            </div>
+        `;
+    }
+};
+
+window.updateFeeDisplay = function() {
+    const el = document.getElementById('fee-calculation-summary');
+    if (el) {
+        el.innerHTML = window.getFeeCalculationHtml();
+    }
+};
+
 function getNextStepsView() {
     const rawFormats = state.pricing?.formats;
     const formats = (rawFormats && rawFormats.length > 0) ? rawFormats : [
@@ -1188,6 +1404,8 @@ function getNextStepsView() {
         `;
     }).join('');
 
+    const isMultiple = state.resultDetails.scope === 'multiple';
+
     return `
     <div class="min-h-screen bg-gray-50 py-10 px-4 fade-in">
         <div class="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl border border-gray-100 p-8">
@@ -1196,40 +1414,119 @@ function getNextStepsView() {
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div>
-                    <h2 class="text-2xl font-bold text-gray-800">Publish Configuration</h2>
-                    <p class="text-sm text-gray-500 mt-1">Provide examination details and select your output format</p>
+                    <h2 class="text-2xl font-bold text-gray-800">Publish New Result Configuration</h2>
+                    <p class="text-sm text-gray-500 mt-1">Select result scope, examination details, and output format</p>
                 </div>
             </div>
             
             <form id="next-steps-form" class="space-y-8">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Total Students</label>
-                        <input required type="number" min="1" id="res-students" value="${state.resultDetails.totalStudents}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-colors" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Publish Date</label>
-                        <input required type="date" id="res-date" value="${state.resultDetails.examDate}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-colors" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Total Subjects</label>
-                        <input required type="number" min="1" id="res-subjects" value="${state.resultDetails.totalSubjects}" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-colors" />
+                <!-- STEP 1: RESULT SCOPE SELECTION -->
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">1. Select Result Scope</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div onclick="window.setResultScope('single')" class="p-5 rounded-2xl border-2 cursor-pointer transition-all ${!isMultiple ? 'border-primary bg-blue-50/70 shadow-md ring-2 ring-blue-500/20' : 'border-gray-200 hover:border-gray-300 bg-white'}">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-gray-900 text-lg flex items-center gap-2">
+                                    <i class="fa-solid fa-file-lines text-primary"></i> One Result (Single Class)
+                                </span>
+                                <input type="radio" name="resultScopeToggle" value="single" ${!isMultiple ? 'checked' : ''} class="w-5 h-5 accent-primary" />
+                            </div>
+                            <p class="text-xs text-gray-500 leading-relaxed">Publish result for a single class or examination batch with standard single-file verification flow.</p>
+                        </div>
+
+                        <div onclick="window.setResultScope('multiple')" class="p-5 rounded-2xl border-2 cursor-pointer transition-all ${isMultiple ? 'border-indigo-600 bg-indigo-50/70 shadow-md ring-2 ring-indigo-500/20' : 'border-gray-200 hover:border-gray-300 bg-white'}">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-gray-900 text-lg flex items-center gap-2">
+                                    <i class="fa-solid fa-layer-group text-indigo-600"></i> Multiple Results (Multiple Classes)
+                                </span>
+                                <input type="radio" name="resultScopeToggle" value="multiple" ${isMultiple ? 'checked' : ''} class="w-5 h-5 accent-indigo-600" />
+                            </div>
+                            <p class="text-xs text-gray-500 leading-relaxed">Publish results for multiple classes at once (e.g. 8th, 9th, 10th). Separate document uploads and separate draft registers emailed for each class.</p>
+                        </div>
                     </div>
                 </div>
 
+                <!-- STEP 2: CLASS DETAILS -->
+                ${!isMultiple ? `
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">2. Single Class Details</label>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Total Students</label>
+                                <input required type="number" min="1" id="res-students" value="${state.resultDetails.totalStudents || ''}" oninput="state.resultDetails.totalStudents = this.value; window.updateFeeDisplay();" placeholder="e.g. 75" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white transition-colors" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Publish Date</label>
+                                <input required type="date" id="res-date" value="${state.resultDetails.examDate || ''}" onchange="state.resultDetails.examDate = this.value;" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white transition-colors" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Total Subjects</label>
+                                <input required type="number" min="1" id="res-subjects" value="${state.resultDetails.totalSubjects || ''}" oninput="state.resultDetails.totalSubjects = this.value;" placeholder="e.g. 6" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white transition-colors" />
+                            </div>
+                        </div>
+                    </div>
+                ` : `
+                    <div>
+                        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider">2. Configure Multiple Classes / Batches</label>
+                                <p class="text-xs text-gray-500">Provide details for each class (e.g. 8th, 9th, 10th). You will submit separate documents for each.</p>
+                            </div>
+                            <button type="button" onclick="window.addBatchRow()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3 py-1.5 rounded-lg text-xs border border-indigo-200 transition-colors flex items-center gap-1.5 shadow-xs">
+                                <i class="fa-solid fa-plus"></i> Add Another Class
+                            </button>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            ${(state.resultDetails.batches || []).map((batch, idx) => `
+                                <div class="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                                    <span class="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">${idx + 1}</span>
+                                    <div class="flex-1">
+                                        <label class="block text-[11px] font-semibold text-gray-600 mb-1">Class / Batch Name</label>
+                                        <input type="text" required value="${batch.name || ''}" oninput="window.updateBatchField(${idx}, 'name', this.value)" placeholder="e.g. Class 8th" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white outline-none" />
+                                    </div>
+                                    <div class="w-full md:w-36">
+                                        <label class="block text-[11px] font-semibold text-gray-600 mb-1">Students</label>
+                                        <input type="number" min="1" required value="${batch.students || ''}" oninput="window.updateBatchField(${idx}, 'students', this.value)" placeholder="e.g. 50" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white outline-none" />
+                                    </div>
+                                    <div class="w-full md:w-44">
+                                        <label class="block text-[11px] font-semibold text-gray-600 mb-1">Target Date</label>
+                                        <input type="date" required value="${batch.examDate || state.resultDetails.examDate || ''}" onchange="window.updateBatchField(${idx}, 'examDate', this.value)" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white outline-none" />
+                                    </div>
+                                    <div class="w-full md:w-28">
+                                        <label class="block text-[11px] font-semibold text-gray-600 mb-1">Subjects</label>
+                                        <input type="number" min="1" required value="${batch.subjects || state.resultDetails.totalSubjects || ''}" oninput="window.updateBatchField(${idx}, 'subjects', this.value)" placeholder="e.g. 6" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white outline-none" />
+                                    </div>
+                                    ${(state.resultDetails.batches || []).length > 1 ? `
+                                        <button type="button" onclick="window.removeBatchRow(${idx})" class="text-red-500 hover:text-red-700 p-2 text-sm transition-colors mt-2 md:mt-4 self-center md:self-auto" title="Remove Class">
+                                            <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `}
+
+                <!-- STEP 3: OUTPUT FORMAT -->
                 <div>
                     <div class="flex items-center justify-between mb-4">
-                        <label class="block text-lg font-bold text-gray-800">Select Output Format</label>
-                        <span class="text-xs text-gray-500 font-medium">Choose from admin configured formats</span>
+                        <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider">3. Select Output Format</label>
+                        <span class="text-xs text-gray-500 font-medium">Standard rates configured by admin</span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         ${formatsHtml}
                     </div>
                 </div>
 
+                <!-- STEP 4: LIVE FEE CALCULATION & SUMMARY CARD -->
+                <div id="fee-calculation-summary" class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white p-6 rounded-2xl shadow-xl border border-gray-700">
+                    ${window.getFeeCalculationHtml()}
+                </div>
+
                 <div class="border-t pt-8 flex justify-end">
                     <button type="submit" class="bg-gray-900 text-white font-bold py-4 px-10 rounded-xl hover:bg-black transition-colors shadow-lg flex items-center">
-                        Continue to Request <i class="fa-solid fa-arrow-right ml-3"></i>
+                        Continue to Request Review <i class="fa-solid fa-arrow-right ml-3"></i>
                     </button>
                 </div>
             </form>
@@ -1238,20 +1535,95 @@ function getNextStepsView() {
 }
 
 function getPaymentView() {
+    const rate = window.getFormatRate ? window.getFormatRate() : 50;
+    const isMultiple = state.resultDetails.scope === 'multiple';
+    
+    let summaryHtml = '';
+    let totalFee = 0;
+    
+    if (isMultiple) {
+        const batches = state.resultDetails.batches || [];
+        const totalStudents = batches.reduce((acc, b) => acc + (parseInt(b.students) || 0), 0);
+        totalFee = totalStudents * rate;
+        
+        summaryHtml = `
+            <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 mb-6 text-left">
+                <div class="flex items-center justify-between mb-3 border-b border-indigo-200 pb-2">
+                    <span class="font-bold text-indigo-900 text-sm uppercase tracking-wide flex items-center gap-1.5">
+                        <i class="fa-solid fa-layer-group text-indigo-600"></i> Multiple Results Order Summary
+                    </span>
+                    <span class="bg-indigo-600 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">${batches.length} Classes</span>
+                </div>
+                
+                <div class="space-y-2 mb-3">
+                    ${batches.map((b, idx) => `
+                        <div class="flex justify-between text-xs text-gray-700 bg-white p-2.5 rounded-lg border border-indigo-100">
+                            <div>
+                                <span class="font-bold text-gray-900 block">${b.name || 'Class ' + (idx + 1)}</span>
+                                <span class="text-[11px] text-gray-500">${b.students || 0} Students &bull; Target: ${b.examDate || 'N/A'}</span>
+                            </div>
+                            <span class="font-bold font-mono text-indigo-700 text-xs">₹${((parseInt(b.students) || 0) * rate).toLocaleString('en-IN')}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <div class="pt-2 border-t border-indigo-200 flex justify-between items-center text-xs text-gray-600">
+                    <span>Total Aggregated Students:</span>
+                    <span class="font-bold text-gray-900 font-mono">${totalStudents} Students</span>
+                </div>
+                <div class="flex justify-between items-center text-xs text-gray-600 mt-1">
+                    <span>Selected Format:</span>
+                    <span class="font-bold text-gray-900">${state.resultDetails.option} (₹${rate}/stu)</span>
+                </div>
+                <div class="flex justify-between items-center text-base font-black text-indigo-900 mt-3 pt-3 border-t border-indigo-200">
+                    <span>Combined Total Fee:</span>
+                    <span class="text-2xl text-green-600 font-mono">₹${totalFee.toLocaleString('en-IN')}</span>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mb-6 leading-relaxed">Admin will review this configuration. After approval, you will submit a separate marksheet/data file for each class. Admin will verify and email separate Tabulation Registers for all classes directly to your email.</p>
+        `;
+    } else {
+        const totalStudents = parseInt(state.resultDetails.totalStudents) || 0;
+        totalFee = totalStudents * rate;
+        
+        summaryHtml = `
+            <div class="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-6 text-left">
+                <div class="flex justify-between items-center text-sm mb-2">
+                    <span class="text-gray-600">Output Format:</span>
+                    <span class="font-bold text-gray-900">${state.resultDetails.option}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm mb-2">
+                    <span class="text-gray-600">Total Students:</span>
+                    <span class="font-bold text-gray-900 font-mono">${totalStudents}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm mb-2">
+                    <span class="text-gray-600">Publish Date:</span>
+                    <span class="font-bold text-gray-900">${state.resultDetails.examDate || 'N/A'}</span>
+                </div>
+                <div class="flex justify-between items-center text-base font-black text-blue-900 pt-2 border-t border-blue-200">
+                    <span>Total Estimated Fee:</span>
+                    <span class="text-2xl text-green-600 font-mono">₹${totalFee.toLocaleString('en-IN')}</span>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mb-6 leading-relaxed">The admin will review this request and provide the required document upload slots.</p>
+        `;
+    }
+
     return `
     <div class="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 fade-in">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 border border-gray-100 text-center">
+        <div class="bg-white rounded-3xl shadow-xl w-full max-w-lg p-8 border border-gray-100 text-center">
             <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <i class="fa-solid fa-file-invoice text-3xl text-blue-600"></i>
             </div>
-            <h2 class="text-2xl font-bold text-gray-800 mb-2">Request Output Format</h2>
-            <p class="text-gray-500 mb-6">You have selected <strong>${state.resultDetails.option}</strong> format. The admin will review this request and provide the required document upload slots.</p>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Confirm Output Request</h2>
+            
+            ${summaryHtml}
             
             <button id="btn-pay" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-1">
                 Submit Request to Admin <i class="fa-solid fa-arrow-right ml-2"></i>
             </button>
             <button onclick="navigate('nextSteps')" class="w-full mt-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition-colors">
-                Cancel
+                Back to Edit
             </button>
         </div>
     </div>
@@ -1603,7 +1975,10 @@ function attachEventListeners() {
     const nextStepsForm = document.getElementById('next-steps-form');
     if (nextStepsForm) {
         const radios = document.querySelectorAll('input[name="formatOption"]');
-        radios.forEach(radio => radio.addEventListener('change', (e) => { state.resultDetails.option = e.target.value; render(); }));
+        radios.forEach(radio => radio.addEventListener('change', (e) => { 
+            state.resultDetails.option = e.target.value; 
+            render(); 
+        }));
 
         nextStepsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1611,9 +1986,31 @@ function attachEventListeners() {
             if (checkedRadio) {
                 state.resultDetails.option = checkedRadio.value;
             }
-            state.resultDetails.totalStudents = document.getElementById('res-students').value;
-            state.resultDetails.examDate = document.getElementById('res-date').value;
-            state.resultDetails.totalSubjects = document.getElementById('res-subjects').value;
+            
+            if (state.resultDetails.scope === 'multiple') {
+                const batches = state.resultDetails.batches || [];
+                if (batches.length === 0) {
+                    showToast('Please add at least one class / batch!');
+                    return;
+                }
+                for (let i = 0; i < batches.length; i++) {
+                    if (!batches[i].name || !batches[i].students) {
+                        showToast(`Please enter name and student count for Class #${i + 1}`);
+                        return;
+                    }
+                }
+                const totalStudents = batches.reduce((sum, b) => sum + (parseInt(b.students) || 0), 0);
+                state.resultDetails.totalStudents = totalStudents.toString();
+                state.resultDetails.examDate = batches[0].examDate || '';
+                state.resultDetails.totalSubjects = batches[0].subjects || '';
+            } else {
+                const sEl = document.getElementById('res-students');
+                const dEl = document.getElementById('res-date');
+                const subEl = document.getElementById('res-subjects');
+                if (sEl) state.resultDetails.totalStudents = sEl.value;
+                if (dEl) state.resultDetails.examDate = dEl.value;
+                if (subEl) state.resultDetails.totalSubjects = subEl.value;
+            }
             
             navigate('payment');
         });
@@ -1642,17 +2039,18 @@ function attachEventListeners() {
         }
     });
 
-    // UPLOAD DOCUMENTS
+    // UPLOAD DOCUMENTS (Single Class)
     const btnUpload = document.getElementById('btn-upload');
     if (btnUpload) btnUpload.addEventListener('click', async () => {
         const fileInput = document.getElementById('file-upload');
-        if(!fileInput.files.length) { showToast('Please select a file!'); return; }
+        if(!fileInput || !fileInput.files.length) { showToast('Please select a file!'); return; }
         
         const formData = new FormData();
         formData.append('email', state.email);
         formData.append('file', fileInput.files[0]);
         
-        btnUpload.innerHTML = 'Uploading...';
+        btnUpload.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading...';
+        btnUpload.disabled = true;
         try {
             const res = await fetch(`${API_BASE}/institutes/upload`, {
                 method: 'POST',
@@ -1661,8 +2059,54 @@ function attachEventListeners() {
             if (res.ok) {
                 showToast('Documents uploaded successfully!');
                 navigate('dashboard');
+            } else {
+                showToast('Upload failed');
+                btnUpload.disabled = false;
+                btnUpload.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> Send securely via Email';
             }
-        } catch(e) { showToast('Upload failed'); }
+        } catch(e) { 
+            showToast('Upload failed');
+            btnUpload.disabled = false;
+            btnUpload.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> Send securely via Email';
+        }
+    });
+
+    // UPLOAD DOCUMENTS (Multiple Classes - Separate Files)
+    const btnUploadMultiple = document.getElementById('btn-upload-multiple');
+    if (btnUploadMultiple) btnUploadMultiple.addEventListener('click', async () => {
+        const batches = state.details?.batches || [];
+        const formData = new FormData();
+        formData.append('email', state.email);
+        
+        for (let i = 0; i < batches.length; i++) {
+            const input = document.getElementById(`batch-file-${i}`);
+            if (!input || !input.files.length) {
+                showToast(`Please select the file for ${batches[i].name || 'Class ' + (i + 1)}!`);
+                return;
+            }
+            formData.append('files', input.files[0]);
+        }
+        
+        btnUploadMultiple.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Submitting All Files...';
+        btnUploadMultiple.disabled = true;
+        try {
+            const res = await fetch(`${API_BASE}/institutes/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            if (res.ok) {
+                showToast(`All ${batches.length} class files submitted securely via email!`);
+                navigate('dashboard');
+            } else {
+                showToast('Upload failed. Please try again.');
+                btnUploadMultiple.disabled = false;
+                btnUploadMultiple.innerHTML = `<i class="fa-solid fa-paper-plane mr-2"></i> Submit All ${batches.length} Class Files Securely via Email`;
+            }
+        } catch(e) {
+            showToast('Network error during upload.');
+            btnUploadMultiple.disabled = false;
+            btnUploadMultiple.innerHTML = `<i class="fa-solid fa-paper-plane mr-2"></i> Submit All ${batches.length} Class Files Securely via Email`;
+        }
     });
 
     // VERIFY TABULATION

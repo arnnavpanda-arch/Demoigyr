@@ -29,7 +29,46 @@ def send_email(to_email, subject, body_html):
         print(f"❌ Failed to send email to {to_email}: {e}")
         return False
 
+def send_email_with_multiple_attachments(to_email, subject, body_html, filepaths):
+    msg = MIMEMultipart("mixed")
+    msg['Subject'] = subject
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = to_email
+
+    msg.attach(MIMEText(get_premium_email_html(subject, body_html), 'html'))
+
+    attached_count = 0
+    for fp in filepaths:
+        if fp and os.path.exists(fp):
+            filename = os.path.basename(fp)
+            # Remove internal prefix if present for clean client download name
+            display_name = filename
+            if display_name.startswith("tab_"):
+                parts = display_name.split("_", 2)
+                if len(parts) >= 3:
+                    display_name = parts[2]
+            with open(fp, "rb") as attachment:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f"attachment; filename=\"{display_name}\"")
+            msg.attach(part)
+            attached_count += 1
+
+    try:
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SENDER_EMAIL, APP_PASSWORD)
+            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+            print(f"✅ Email with {attached_count} attachment(s) sent successfully to {to_email}")
+            return True
+    except Exception as e:
+        print(f"❌ Failed to send email with multiple attachments to {to_email}: {e}")
+        return False
+
 def send_email_with_attachment(to_email, subject, body_html, filepath):
+    if isinstance(filepath, (list, tuple)):
+        return send_email_with_multiple_attachments(to_email, subject, body_html, filepath)
+
     msg = MIMEMultipart("mixed")
     msg['Subject'] = subject
     msg['From'] = SENDER_EMAIL
@@ -39,11 +78,16 @@ def send_email_with_attachment(to_email, subject, body_html, filepath):
 
     if filepath and os.path.exists(filepath):
         filename = os.path.basename(filepath)
+        display_name = filename
+        if display_name.startswith("tab_"):
+            parts = display_name.split("_", 2)
+            if len(parts) >= 3:
+                display_name = parts[2]
         with open(filepath, "rb") as attachment:
             part = MIMEBase("application", "octet-stream")
             part.set_payload(attachment.read())
         encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f"attachment; filename= {filename}")
+        part.add_header("Content-Disposition", f"attachment; filename=\"{display_name}\"")
         msg.attach(part)
 
     try:

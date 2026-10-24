@@ -143,15 +143,37 @@ async function loadApplication() {
                     actionsHtml = `<p class="text-xs text-purple-600 font-bold"><i class="fa-solid fa-clock"></i> Waiting for institute to upload documents...</p>`;
                 }
                 else if(inst.status === 'processing') {
-                    actionsHtml = `
-                        <div class="mt-3 border-t pt-3 flex flex-col gap-2">
-                            <label class="text-xs font-bold text-gray-700">Upload & Send Tabulation Register:</label>
-                            <div class="flex items-center gap-2">
-                                <input type="file" id="file-${inst.email}" class="text-xs border p-1 w-full rounded bg-white">
-                                <button onclick="sendVerificationWithFile('${inst.email}')" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-1.5 rounded text-xs font-bold transition-colors whitespace-nowrap"><i class="fa-solid fa-paper-plane mr-1"></i> Send</button>
+                    if (inst.details?.scope === 'multiple' && inst.details?.batches && inst.details.batches.length > 0) {
+                        actionsHtml = `
+                            <div class="mt-3 border-t pt-3 flex flex-col gap-2">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-bold text-gray-800"><i class="fa-solid fa-layer-group text-orange-500 mr-1"></i> Upload Separate Registers (${inst.details.batches.length} Classes):</label>
+                                    <span class="text-[10px] bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded">All files emailed separately</span>
+                                </div>
+                                <div class="space-y-1.5 mt-1">
+                                    ${inst.details.batches.map((b, idx) => `
+                                        <div class="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200 text-xs">
+                                            <span class="font-bold text-gray-700 w-28 truncate" title="${b.name || 'Class ' + (idx + 1)}">${b.name || 'Class ' + (idx + 1)}:</span>
+                                            <input type="file" id="tab-file-${idx}-${inst.email}" class="text-xs border p-1 flex-1 rounded bg-white" required>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <button onclick="sendMultipleVerificationFiles('${inst.email}', ${inst.details.batches.length})" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors w-full mt-2 shadow-sm flex items-center justify-center">
+                                    <i class="fa-solid fa-paper-plane mr-1.5"></i> Submit & Email All ${inst.details.batches.length} Tabulation Registers
+                                </button>
                             </div>
-                        </div>
-                    `;
+                        `;
+                    } else {
+                        actionsHtml = `
+                            <div class="mt-3 border-t pt-3 flex flex-col gap-2">
+                                <label class="text-xs font-bold text-gray-700">Upload & Send Tabulation Register:</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="file" id="file-${inst.email}" class="text-xs border p-1 w-full rounded bg-white">
+                                    <button onclick="sendVerificationWithFile('${inst.email}')" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-1.5 rounded text-xs font-bold transition-colors whitespace-nowrap"><i class="fa-solid fa-paper-plane mr-1"></i> Send</button>
+                                </div>
+                            </div>
+                        `;
+                    }
                 }
                 else if(inst.status === 'verification_pending') {
                     actionsHtml = `<p class="text-xs text-orange-600 font-bold"><i class="fa-solid fa-clock"></i> Waiting for institute to approve tabulation...</p>`;
@@ -172,9 +194,10 @@ async function loadApplication() {
                 let adminDocsHtml = (inst.status === 'verification_pending') ? `<div class="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200 text-sm flex items-start gap-2"><i class="fa-solid fa-envelope-circle-check text-yellow-600 mt-0.5"></i><span class="text-yellow-800 font-medium">Tabulation Register Sent to Client via Email. Awaiting their approval.</span></div>` : '';
                 
                 let docsHtml = '';
-                if(inst.documents && inst.documents.length) {
-                    docsHtml = `<div class="mt-4"><p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"><i class="fa-solid fa-folder-open text-blue-500 mr-1"></i> Client Uploaded Documents:</p><div class="flex flex-wrap gap-2">` + 
-                    inst.documents.map(d => `<a href="${API_BASE}/files/${d}" target="_blank" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border shadow-sm"><i class="fa-solid fa-file-arrow-down text-blue-600 mr-1"></i> ${d.substring(0,20)}...</a>`).join('') + 
+                const clientDocs = (inst.uploaded_documents_info && inst.uploaded_documents_info.length) ? inst.uploaded_documents_info : (inst.documents || []);
+                if(clientDocs.length) {
+                    docsHtml = `<div class="mt-4"><p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"><i class="fa-solid fa-folder-open text-blue-500 mr-1"></i> Client Uploaded Documents (${clientDocs.length} File${clientDocs.length > 1 ? 's' : ''}):</p><div class="flex flex-wrap gap-2">` + 
+                    clientDocs.map(d => `<span class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-md text-xs font-medium border shadow-xs flex items-center gap-1.5"><i class="fa-solid fa-file-lines text-blue-600"></i> ${d}</span>`).join('') + 
                     `</div></div>`;
                 }
 
@@ -186,6 +209,7 @@ async function loadApplication() {
                                 <div class="mb-1 flex items-center gap-2 flex-wrap">
                                     <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-mono tracking-wider shadow-sm">${inst.igyr_id || 'IGYR-WAITING'}</span>
                                     <h4 class="font-black text-gray-800 text-lg">${inst.institute?.name || 'Unknown Institute'}</h4>
+                                    ${inst.details?.scope === 'multiple' ? `<span class="bg-indigo-100 text-indigo-800 text-[10px] font-black px-2 py-0.5 rounded uppercase border border-indigo-200"><i class="fa-solid fa-layer-group mr-1"></i> MULTIPLE (${inst.details.batches ? inst.details.batches.length : 0} CLASSES)</span>` : ''}
                                 </div>
                                 <div class="flex items-center gap-3">
                                     <p class="text-xs text-gray-500 font-mono"><i class="fa-regular fa-envelope mr-1"></i> ${inst.email}</p>
@@ -201,6 +225,19 @@ async function loadApplication() {
                         
                         <!-- Order Details Grid -->
                         <div class="p-6 flex-grow">
+                            ${inst.details?.scope === 'multiple' && inst.details?.batches ? `
+                                <div class="bg-indigo-50/70 p-3.5 rounded-xl border border-indigo-100 mb-4">
+                                    <span class="block text-[10px] font-bold text-indigo-700 uppercase tracking-wider mb-2"><i class="fa-solid fa-graduation-cap mr-1"></i> Configured Classes & Batches (${inst.details.batches.length})</span>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${inst.details.batches.map(b => `
+                                            <span class="bg-white border border-indigo-200 text-indigo-950 text-xs font-bold px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1.5">
+                                                <i class="fa-solid fa-book-bookmark text-indigo-500"></i> ${b.name}: <span class="text-indigo-600 font-mono">${b.students || 0} students</span>
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+
                             <div class="grid grid-cols-2 gap-4 mb-4">
                                 <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
                                     <span class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Requested Format</span>
@@ -543,6 +580,36 @@ async function sendVerificationWithFile(email) {
             btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-1"></i> Send';
         }
     } catch(e) { showToast('Upload error'); }
+}
+
+async function sendMultipleVerificationFiles(email, count) {
+    const formData = new FormData();
+    formData.append('email', email);
+    
+    for (let i = 0; i < count; i++) {
+        const fileInput = document.getElementById(`tab-file-${i}-${email}`);
+        if (!fileInput || !fileInput.files.length) {
+            showToast(`Please select the tabulation register file for Class #${i + 1}!`);
+            return;
+        }
+        formData.append('files', fileInput.files[0]);
+    }
+    
+    try {
+        showToast(`Uploading and emailing all ${count} tabulation registers...`);
+        const res = await fetch(`${API_BASE}/admin/upload-tabulation`, {
+            method: 'POST',
+            body: formData
+        });
+        if (res.ok) {
+            showToast(`All ${count} Tabulation Registers sent to ${email} for verification!`);
+            loadApplication();
+        } else {
+            showToast('Failed to send tabulation registers. Please check logs.');
+        }
+    } catch(e) {
+        showToast('Upload error occurred');
+    }
 }
 
 async function rejectOrder(email) {

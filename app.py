@@ -341,6 +341,8 @@ def get_status():
         "igyr_id": inst.get("igyr_id", ""),
         "details": inst.get("details"),
         "tabulation_file": inst.get("tabulation_file"),
+        "uploaded_documents_info": inst.get("uploaded_documents_info", []),
+        "documents": inst.get("documents", []),
         "history": inst.get("history", []),
         "payments": inst.get("payments", {}),
         "rejection_reason": inst.get("rejection_reason", "")
@@ -381,51 +383,75 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 @app.route('/api/institutes/upload', methods=['POST'])
 def upload_document():
     import os
-    email = request.form.get('email', '').strip().lower()
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-        
     from werkzeug.utils import secure_filename
-    filename = secure_filename(email + "_" + file.filename)
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    
-    # 1. Save temporarily to attach to email
-    file.save(filepath)
-    
+    from email_service import send_email_with_multiple_attachments
+
+    email = request.form.get('email', '').strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    uploaded_files = []
+    if 'files' in request.files:
+        for f in request.files.getlist('files'):
+            if f and f.filename:
+                uploaded_files.append(f)
+    for k in request.files:
+        if k != 'files':
+            for f in request.files.getlist(k):
+                if f and f.filename and f not in uploaded_files:
+                    uploaded_files.append(f)
+
+    if not uploaded_files:
+        return jsonify({"error": "No file selected for upload"}), 400
+
+    saved_filepaths = []
+    saved_filenames = []
+    for idx, f in enumerate(uploaded_files):
+        clean_fn = secure_filename(f.filename)
+        dest_fn = f"client_{email}_{idx}_{clean_fn}"
+        fp = os.path.join(UPLOAD_FOLDER, dest_fn)
+        f.save(fp)
+        saved_filepaths.append(fp)
+        saved_filenames.append(clean_fn)
+
     db = get_db()
     inst = db['institutes'].find_one({"email": email})
     inst_name = inst.get('institute', {}).get('name', email) if inst else email
-    
-    # 2. Update status to processing (DO NOT store the document in DB)
+
+    # 2. Update status to processing (DO NOT store the actual documents in DB)
     db['institutes'].update_one(
         {"email": email},
-        {
-            "$set": {"status": "processing"}
-        }
+        {"$set": {
+            "status": "processing",
+            "uploaded_documents_info": saved_filenames
+        }}
     )
-    
-    # 3. Send the uploaded data directly to the company inbox!
-    from email_service import send_email_with_attachment
+
+    # 3. Send all uploaded class data directly to company inbox
     company_email = 'indiagetyourresult@gmail.com'
-    subject = f"Secure Data Upload: {inst_name}"
-    body = f"<h3>Secure Data Received</h3><p>Institute: <b>{inst_name}</b> ({email})</p><p>Please find the attached data files. This file was NOT stored in the database for security purposes.</p>"
-    
-    success = send_email_with_attachment(company_email, subject, body, filepath)
-    
-    # 4. Delete the temporary file from the server so it is completely secure and only in email
-    try:
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    except Exception as e:
-        print("Could not delete temp file:", e)
-    
+    subject = f"Secure Data Upload: {inst_name} ({len(saved_filepaths)} File(s))"
+    file_list_html = "".join([f"<li><b>{fn}</b></li>" for fn in saved_filenames])
+    body = f"""
+    <h3>Secure Data Received from Institute</h3>
+    <p>Institute: <b>{inst_name}</b> ({email})</p>
+    <p>Uploaded <b>{len(saved_filepaths)} file(s)</b>:</p>
+    <ul>{file_list_html}</ul>
+    <p>Please find all class result documents attached. Files are deleted from server storage immediately after sending for confidentiality.</p>
+    """
+
+    success = send_email_with_multiple_attachments(company_email, subject, body, saved_filepaths)
+
+    # 4. Clean up temporary files
+    for fp in saved_filepaths:
+        try:
+            if os.path.exists(fp):
+                os.remove(fp)
+        except Exception as e:
+            print("Could not delete temp file:", e)
+
     if success:
-        return jsonify({"message": "File uploaded securely to email!"}), 200
+        return jsonify({"message": f"{len(saved_filepaths)} file(s) uploaded and emailed for processing successfully!"}), 200
     else:
-        # Revert status if email failed
         db['institutes'].update_one({"email": email}, {"$set": {"status": "documents_required"}})
         return jsonify({"error": "Failed to send email. Please try again."}), 500
 
@@ -880,48 +906,86 @@ def download_file(filename):
 def admin_upload_tabulation():
     import os
     from werkzeug.utils import secure_filename
-    from email_service import send_email_with_attachment
+    from email_service import send_email_with_multiple_attachments
     
     email = request.form.get('email', '').strip().lower()
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-        
-    filename = secure_filename("tab_" + email + "_" + file.filename)
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(filepath)
-    
-    # 1. Update status to verification_pending (DO NOT save file in DB)
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    uploaded_files = []
+    if 'files' in request.files:
+        for f in request.files.getlist('files'):
+            if f and f.filename:
+                uploaded_files.append(f)
+    for k in request.files:
+        if k != 'files':
+            for f in request.files.getlist(k):
+                if f and f.filename and f not in uploaded_files:
+                    uploaded_files.append(f)
+
+    if not uploaded_files:
+        return jsonify({"error": "No file(s) selected"}), 400
+
+    saved_filepaths = []
+    saved_filenames = []
+    for idx, f in enumerate(uploaded_files):
+        clean_fn = secure_filename(f.filename)
+        dest_fn = f"tab_{email}_{idx}_{clean_fn}"
+        fp = os.path.join(UPLOAD_FOLDER, dest_fn)
+        f.save(fp)
+        saved_filepaths.append(fp)
+        saved_filenames.append(clean_fn)
+
     db = get_db()
+    inst = db['institutes'].find_one({"email": email})
+    inst_name = inst.get('institute', {}).get('name', 'Institute Partner') if inst else 'Institute Partner'
+
+    # Update status to verification_pending
     db['institutes'].update_one(
         {"email": email},
         {"$set": {
             "status": "verification_pending",
-            "tabulation_file": ""
+            "tabulation_file": ", ".join(saved_filenames)
         }}
     )
-    
-    # 2. Email the tabulation register directly to the institute
-    subject = "Action Required: Verify Your Tabulation Register"
-    body = "<p>Your Draft Tabulation Register is ready!</p><p>Please find the attached document for your review. Once you have reviewed it, log back into your portal dashboard and click 'Approve & Publish' to finalize the process.</p>"
-    
-    success = send_email_with_attachment(email, subject, body, filepath)
-    
-    # 3. Delete temporary file from server
-    try:
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    except Exception as e:
-        print("Could delete temp file:", e)
-        
-    if success:
-        return jsonify({"message": "Tabulation uploaded and verification requested via email"}), 200
+
+    file_count = len(saved_filepaths)
+    if file_count > 1:
+        subject = f"Action Required: Verify Your Draft Tabulation Registers ({file_count} Batches Attached)"
+        batch_items = "".join([f"<li style='margin-bottom: 5px;'><b>{saved_filenames[i]}</b></li>" for i in range(file_count)])
+        body = f"""
+        <p>Dear <strong>{inst_name}</strong>,</p>
+        <p>Your official Draft Tabulation Registers for all <strong>{file_count} classes/batches</strong> have been prepared!</p>
+        <p>Please find the <strong>{file_count} separate registers</strong> attached to this email for your detailed review:</p>
+        <ul style="background-color: #f3f4f6; padding: 15px 25px; border-radius: 8px;">{batch_items}</ul>
+        <p>After inspecting each attached document, log into your IGYR Portal Dashboard and click <strong>'Approve Tabulation'</strong> to authorize final publication.</p>
+        """
     else:
-        # Revert status
+        subject = "Action Required: Verify Your Tabulation Register"
+        body = f"""
+        <p>Dear <strong>{inst_name}</strong>,</p>
+        <p>Your official Draft Tabulation Register is ready for review!</p>
+        <p>Please find the attached document (<strong>{saved_filenames[0]}</strong>). Once inspected, log into your IGYR Portal Dashboard and click <strong>'Approve Tabulation'</strong> to authorize final publication.</p>
+        """
+
+    success = send_email_with_multiple_attachments(email, subject, body, saved_filepaths)
+
+    # Delete temporary files from server
+    for fp in saved_filepaths:
+        try:
+            if os.path.exists(fp):
+                os.remove(fp)
+        except Exception as e:
+            print("Could not delete temp file:", e)
+
+    if success:
+        return jsonify({
+            "message": f"Successfully uploaded and dispatched {file_count} tabulation register(s) to {email}!",
+            "files_count": file_count
+        }), 200
+    else:
         db['institutes'].update_one({"email": email}, {"$set": {"status": "processing"}})
-        return jsonify({"error": "Failed to send email to client."}), 500
+        return jsonify({"error": "Failed to send email with attachments. Please try again."}), 500
 
 
 @app.route('/api/admin/reject-order', methods=['POST'])
