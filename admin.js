@@ -1049,7 +1049,7 @@ window.handleAdminLogin = async function(e) {
             // Failed attempt: standard error message without exposing attempt count
             if (errorBox) {
                 errorBox.className = 'p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold flex items-center gap-2.5';
-                errorBox.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-400 text-sm shrink-0"></i> <span>${safeEscapeText(data.error || 'Invalid User ID or Password.')}</span>`;
+                errorBox.innerHTML = '<i class="fa-solid fa-circle-xmark text-red-400 text-sm shrink-0"></i> <span>Invalid User ID or Password.</span>';
             }
             if (passwordInput) {
                 passwordInput.value = '';
