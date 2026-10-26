@@ -1822,13 +1822,18 @@ function attachEventListeners() {
                 if (res.status === 429 || data.locked) {
                     const secs = data.remaining_seconds || 300;
                     setRegistrationLockout(secs);
-                    state.errorMsg = data.error || 'System is locked for 5 minutes due to 3 unauthorized registration attempts.';
+                    state.errorMsg = '';
                     render();
                     return;
                 }
 
                 if (!res.ok) {
-                    state.errorMsg = data.error || 'Failed to send verification code.';
+                    const rawErr = (data && data.error) ? String(data.error) : '';
+                    if (rawErr.toLowerCase().includes('eligible') || rawErr.toLowerCase().includes('pre-approved') || rawErr.toLowerCase().includes('attempt')) {
+                        state.errorMsg = 'This email is not eligible to create an account in IGYR.';
+                    } else {
+                        state.errorMsg = rawErr || 'Failed to send verification code.';
+                    }
                     render();
                     return;
                 }

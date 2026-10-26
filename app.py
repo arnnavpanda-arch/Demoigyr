@@ -296,17 +296,14 @@ def send_code():
                 registration_lockouts[client_ip]["locked_until"] = now + 300
                 registration_lockouts[client_ip]["attempts"] = 0 # reset counter after locking
                 return jsonify({
-                    "error": "Security Lockout Activated: 3 failed registration attempts with an unauthorized email. Account creation is locked for 5 minutes.",
+                    "error": "Security Lockout Active. Account creation is temporarily suspended for 5 minutes.",
                     "locked": True,
                     "remaining_seconds": 300
                 }), 429
             else:
-                attempts_left = 3 - current_attempts
                 return jsonify({
-                    "error": f"This email is not eligible to create an account in IGYR. Only pre-approved organizations added by the administrator can register. (Attempt {current_attempts} of 3. {attempts_left} attempt remaining before 5-minute security lockout.)",
-                    "locked": False,
-                    "attempts": current_attempts,
-                    "attempts_left": attempts_left
+                    "error": "This email is not eligible to create an account in IGYR.",
+                    "locked": False
                 }), 403
 
         # Email is eligible: reset failed attempts
@@ -389,7 +386,7 @@ def register_institute():
     # Security check: must be in eligible_institutes
     eligible_record = db['eligible_institutes'].find_one({"email": email})
     if not eligible_record:
-        return jsonify({"error": "This email address is not eligible or pre-approved to register. Please contact the administrator."}), 403
+        return jsonify({"error": "This email is not eligible to create an account in IGYR."}), 403
         
     institutes_col = db['institutes']
     
