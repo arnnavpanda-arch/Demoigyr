@@ -235,12 +235,7 @@ function getAuthView() {
                     <span>Countdown timer persists even if browser is refreshed.</span>
                 </div>
             </div>
-
-            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left text-xs text-amber-800 mb-5 shadow-sm">
-                <p class="font-bold mb-1"><i class="fa-solid fa-shield-halved text-amber-600 mr-1"></i> Pre-Approval Requirement</p>
-                <p class="text-[11px] text-amber-700 leading-normal">Only institutions whose official email is pre-authorized by IGYR Super Admin can create an account. Unauthorized attempts trigger a 5-minute security lockout after 3 tries.</p>
-            </div>
-
+            
             <button disabled class="w-full bg-gray-200 text-gray-400 font-bold py-3.5 px-4 rounded-xl cursor-not-allowed text-sm">
                 <i class="fa-solid fa-ban mr-2"></i> Account Creation Locked
             </button>
@@ -251,13 +246,6 @@ function getAuthView() {
         <h3 class="text-2xl font-bold text-gray-800 mb-1">Create Account</h3>
         <p class="text-gray-500 mb-4 text-sm">Join IGYR to publish your results seamlessly</p>
         
-        <div class="bg-blue-50/90 border border-blue-200 rounded-xl p-3 mb-4 text-xs text-blue-900 flex items-start gap-2.5">
-            <i class="fa-solid fa-shield-halved text-blue-600 mt-0.5 shrink-0 text-sm"></i>
-            <div>
-                <span class="font-bold">Security Pre-Authorization:</span> Only organization emails pre-approved by the IGYR Admin can register. Unauthorized attempts will be locked out after 3 tries.
-            </div>
-        </div>
-
         ${getErrorHTML()}
         <form id="auth-form" class="space-y-4">
             <div>
