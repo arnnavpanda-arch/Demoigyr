@@ -625,19 +625,15 @@ def admin_login():
                 print("Failed to dispatch security breach alert email:", mail_err)
                 
             return jsonify({
-                "error": "Security breach threshold reached: 3 consecutive failed attempts. Admin portal is locked for 5 minutes. Security alert automatically dispatched to company inbox.",
+                "error": "Security Lockout Active. Access has been temporarily suspended.",
                 "locked": True,
-                "remaining_seconds": 300,
-                "attempts": current_attempts
+                "remaining_seconds": 300
             }), 429
         else:
             admin_login_lockouts[client_ip] = {"attempts": current_attempts, "locked_until": 0}
-            remaining_attempts = 3 - current_attempts
             return jsonify({
-                "error": f"Invalid User ID or Password. ({remaining_attempts} attempt{'s' if remaining_attempts > 1 else ''} remaining before 5-minute security lockout)",
-                "locked": False,
-                "attempts": current_attempts,
-                "remaining_attempts": remaining_attempts
+                "error": "Invalid User ID or Password.",
+                "locked": False
             }), 401
 
 @app.route('/api/admin/check-session', methods=['GET'])

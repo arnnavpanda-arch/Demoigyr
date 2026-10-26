@@ -1046,15 +1046,10 @@ window.handleAdminLogin = async function(e) {
             const remaining = data.remaining_seconds || 300;
             startLockoutTimer(remaining);
         } else {
-            // 1st or 2nd failed attempt -> show warning
+            // Failed attempt: standard error message without exposing attempt count
             if (errorBox) {
-                const isFinalWarning = data.remaining_attempts === 1;
-                errorBox.className = isFinalWarning
-                    ? 'p-3 bg-amber-950/90 border border-amber-500 rounded-xl text-amber-200 text-xs font-bold flex items-start gap-2.5 animate-pulse'
-                    : 'p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold flex items-start gap-2.5';
-                
-                const icon = isFinalWarning ? 'fa-triangle-exclamation text-amber-400 text-base' : 'fa-circle-xmark text-red-400 text-base';
-                errorBox.innerHTML = `<i class="fa-solid ${icon} mt-0.5 shrink-0"></i> <span>${safeEscapeText(data.error || 'Invalid User ID or Password')}</span>`;
+                errorBox.className = 'p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold flex items-center gap-2.5';
+                errorBox.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-400 text-sm shrink-0"></i> <span>${safeEscapeText(data.error || 'Invalid User ID or Password.')}</span>`;
             }
             if (passwordInput) {
                 passwordInput.value = '';
