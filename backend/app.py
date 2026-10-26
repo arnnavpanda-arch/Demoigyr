@@ -12,6 +12,8 @@ import random
 import os
 import time
 from datetime import datetime
+import secrets
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend requests
@@ -75,6 +77,100 @@ otp_store = {}
 # Security rate-limiting & 5-minute lockout store for unauthorized registration attempts
 # Format: { "client_ip": { "attempts": count, "locked_until": timestamp } }
 registration_lockouts = {}
+
+# Security rate-limiting & 5-minute lockout store for admin login attempts
+# Format: { "client_ip": { "attempts": count, "locked_until": timestamp } }
+admin_login_lockouts = {}
+admin_active_sessions = {}
+
+def get_real_client_ip(req):
+    xff = req.headers.get('X-Forwarded-For')
+    if xff:
+        return xff.split(',')[0].strip()
+    return (req.remote_addr or '127.0.0.1').strip()
+
+def ensure_admin_credentials():
+    try:
+        db = get_db()
+        coll = db['admin_credentials']
+        existing = coll.find_one({"username": "igyr"})
+        if not existing:
+            hashed = generate_password_hash("cutiee", method="pbkdf2:sha256")
+            coll.insert_one({
+                "username": "igyr",
+                "password_hash": hashed,
+                "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                "updated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            print("✅ Admin credentials initialized with encrypted PBKDF2 hash.")
+        else:
+            # Verify if existing hash validates 'cutiee', if not, update it
+            if not check_password_hash(existing.get('password_hash', ''), 'cutiee'):
+                hashed = generate_password_hash("cutiee", method="pbkdf2:sha256")
+                coll.update_one(
+                    {"username": "igyr"},
+                    {
+                        "$set": {
+                            "password_hash": hashed,
+                            "updated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                        },
+                        "$unset": {"password": ""}
+                    }
+                )
+                print("✅ Admin password hash updated to encrypted PBKDF2 hash.")
+            elif 'password' in existing:
+                coll.update_one({"username": "igyr"}, {"$unset": {"password": ""}})
+    except Exception as e:
+        print("ensure_admin_credentials error:", e)
+
+def send_admin_security_breach_email(client_ip, target_username, failed_attempts=3):
+    from email_service import send_email
+    subject = "🚨 SECURITY BREACH ALERT: Unauthorized Admin Login Attempt Detected"
+    now_str = datetime.now().strftime("%d %B %Y, %I:%M:%S %p IST")
+    
+    body = f"""
+    <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+        <h3 style="color: #991b1b; margin-top: 0; margin-bottom: 8px; font-size: 18px;">⚠️ Security Breach Warning: Admin Dashboard Under Unauthorized Access Attempt</h3>
+        <p style="color: #7f1d1d; margin: 0; font-size: 14px; line-height: 1.5;">
+            An unknown user or suspicious entity has repeatedly attempted to access the <strong>IGYR Admin Dashboard</strong> with invalid credentials {failed_attempts} consecutive times.
+        </p>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; font-weight: bold; color: #374151; width: 40%;">Incident Type:</td>
+            <td style="padding: 10px 0; color: #dc2626; font-weight: 600;">Unauthorized Admin Login / Brute Force Attempt</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; font-weight: bold; color: #374151;">Target User ID:</td>
+            <td style="padding: 10px 0; color: #111827;"><code>{target_username or 'unknown'}</code></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; font-weight: bold; color: #374151;">Attacker IP Address:</td>
+            <td style="padding: 10px 0; color: #111827;"><code>{client_ip}</code></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; font-weight: bold; color: #374151;">Failed Attempts:</td>
+            <td style="padding: 10px 0; color: #b91c1c; font-weight: bold;">{failed_attempts} consecutive failed attempts</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; font-weight: bold; color: #374151;">Detection Timestamp:</td>
+            <td style="padding: 10px 0; color: #4b5563;">{now_str}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px 0; font-weight: bold; color: #374151;">Automated Action Taken:</td>
+            <td style="padding: 10px 0; color: #047857; font-weight: bold;">🔒 Admin Portal Locked for 5 Minutes (300 Seconds)</td>
+        </tr>
+    </table>
+
+    <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 14px; margin-top: 15px; border-radius: 4px;">
+        <p style="margin: 0; color: #334155; font-size: 13px;">
+            <strong>Security Notice:</strong> The Admin Dashboard login portal has been temporarily locked out for 5 minutes. If this access attempt was not authorized by you, please check your network connection and review your server security logs immediately.
+        </p>
+    </div>
+    """
+    
+    return send_email("indiagetyourresult@gmail.com", subject, body)
 
 def ensure_eligible_seeded():
     try:
@@ -454,6 +550,111 @@ def upload_document():
     else:
         db['institutes'].update_one({"email": email}, {"$set": {"status": "documents_required"}})
         return jsonify({"error": "Failed to send email. Please try again."}), 500
+
+@app.route('/api/admin/lockout-status', methods=['GET'])
+def admin_lockout_status():
+    client_ip = get_real_client_ip(request)
+    now = time.time()
+    state = admin_login_lockouts.get(client_ip, {})
+    locked_until = state.get("locked_until", 0)
+    
+    if locked_until > now:
+        remaining = int(locked_until - now)
+        return jsonify({"locked": True, "remaining_seconds": remaining}), 200
+    else:
+        if locked_until > 0:
+            admin_login_lockouts[client_ip] = {"attempts": 0, "locked_until": 0}
+        return jsonify({"locked": False, "remaining_seconds": 0}), 200
+
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    client_ip = get_real_client_ip(request)
+    now = time.time()
+    
+    # 1. Check if currently locked out
+    state = admin_login_lockouts.get(client_ip, {"attempts": 0, "locked_until": 0})
+    if state.get("locked_until", 0) > now:
+        remaining = int(state["locked_until"] - now)
+        return jsonify({
+            "error": f"Security Lockout Active. System locked due to repeated unauthorized attempts. Try again in {remaining} seconds.",
+            "locked": True,
+            "remaining_seconds": remaining
+        }), 429
+        
+    data = request.json or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+    
+    if not username or not password:
+        return jsonify({"error": "User ID and Password are required.", "locked": False}), 400
+        
+    db = get_db()
+    admin_record = db['admin_credentials'].find_one({"username": username})
+    
+    is_valid = False
+    if admin_record and admin_record.get('password_hash'):
+        is_valid = check_password_hash(admin_record['password_hash'], password)
+        
+    if is_valid:
+        # Successful login: reset failed attempts
+        admin_login_lockouts[client_ip] = {"attempts": 0, "locked_until": 0}
+        token = secrets.token_hex(32)
+        admin_active_sessions[token] = {
+            "username": username,
+            "login_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "ip": client_ip
+        }
+        return jsonify({
+            "message": "Login successful",
+            "token": token,
+            "username": username
+        }), 200
+    else:
+        # Failed login attempt
+        current_attempts = state.get("attempts", 0) + 1
+        
+        if current_attempts >= 3:
+            # 3rd failed attempt -> lock for 5 minutes (300 seconds)
+            locked_until = now + 300
+            admin_login_lockouts[client_ip] = {"attempts": current_attempts, "locked_until": locked_until}
+            
+            # Send automated security breach email to company inbox
+            try:
+                send_admin_security_breach_email(client_ip, username, current_attempts)
+            except Exception as mail_err:
+                print("Failed to dispatch security breach alert email:", mail_err)
+                
+            return jsonify({
+                "error": "Security breach threshold reached: 3 consecutive failed attempts. Admin portal is locked for 5 minutes. Security alert automatically dispatched to company inbox.",
+                "locked": True,
+                "remaining_seconds": 300,
+                "attempts": current_attempts
+            }), 429
+        else:
+            admin_login_lockouts[client_ip] = {"attempts": current_attempts, "locked_until": 0}
+            remaining_attempts = 3 - current_attempts
+            return jsonify({
+                "error": f"Invalid User ID or Password. ({remaining_attempts} attempt{'s' if remaining_attempts > 1 else ''} remaining before 5-minute security lockout)",
+                "locked": False,
+                "attempts": current_attempts,
+                "remaining_attempts": remaining_attempts
+            }), 401
+
+@app.route('/api/admin/check-session', methods=['GET'])
+def admin_check_session():
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.replace('Bearer ', '').strip() if auth_header else request.args.get('token', '')
+    if token and token in admin_active_sessions:
+        return jsonify({"valid": True, "user": admin_active_sessions[token]}), 200
+    return jsonify({"valid": False}), 401
+
+@app.route('/api/admin/logout', methods=['POST'])
+def admin_logout():
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.replace('Bearer ', '').strip() if auth_header else (request.json and request.json.get('token'))
+    if token and token in admin_active_sessions:
+        del admin_active_sessions[token]
+    return jsonify({"message": "Logged out successfully"}), 200
 
 @app.route('/api/admin/approve-format', methods=['POST'])
 def admin_approve_format():
@@ -1676,4 +1877,5 @@ if __name__ == '__main__':
     # Initialize DB connection on startup
     get_db()
     ensure_eligible_seeded()
+    ensure_admin_credentials()
     app.run(host='0.0.0.0', port=5001, debug=True)

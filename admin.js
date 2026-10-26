@@ -886,23 +886,290 @@ window.confirmAction = function(message) {
     });
 }
 
-// Unified initialization for all admin modules
-function initAdmin() {
+// ==========================================
+// ADMIN AUTHENTICATION & RATE LIMITING LOGIC
+// ==========================================
+
+const ADMIN_TOKEN_KEY = 'igyr_admin_token';
+const ADMIN_LOCKOUT_KEY = 'igyr_admin_lockout_until';
+let lockoutCountdownInterval = null;
+let adminPollInterval = null;
+
+function formatCountdown(totalSeconds) {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function safeEscapeText(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+    });
+}
+
+function startLockoutTimer(remainingSeconds) {
+    const lockoutCard = document.getElementById('admin-lockout-card');
+    const loginForm = document.getElementById('admin-login-form');
+    const timerDisplay = document.getElementById('admin-lockout-timer');
+    const errorBox = document.getElementById('admin-login-error');
+
+    if (errorBox) errorBox.className = 'hidden';
+    if (loginForm) loginForm.style.display = 'none';
+    if (lockoutCard) lockoutCard.classList.remove('hidden');
+
+    const targetTime = Date.now() + (remainingSeconds * 1000);
+    localStorage.setItem(ADMIN_LOCKOUT_KEY, targetTime.toString());
+
+    if (lockoutCountdownInterval) clearInterval(lockoutCountdownInterval);
+
+    function updateTick() {
+        const now = Date.now();
+        const diff = Math.max(0, Math.ceil((targetTime - now) / 1000));
+        if (timerDisplay) {
+            timerDisplay.textContent = formatCountdown(diff);
+        }
+
+        if (diff <= 0) {
+            clearInterval(lockoutCountdownInterval);
+            lockoutCountdownInterval = null;
+            localStorage.removeItem(ADMIN_LOCKOUT_KEY);
+            if (lockoutCard) lockoutCard.classList.add('hidden');
+            if (loginForm) {
+                loginForm.style.display = 'block';
+                const pwdInput = document.getElementById('admin-password');
+                if (pwdInput) pwdInput.value = '';
+            }
+            if (errorBox) {
+                errorBox.className = 'p-3 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-emerald-300 text-xs font-semibold flex items-center gap-2';
+                errorBox.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400"></i> Lockout period expired. You may now attempt to sign in.';
+            }
+        }
+    }
+
+    updateTick();
+    lockoutCountdownInterval = setInterval(updateTick, 1000);
+}
+
+async function checkLockoutStatus() {
+    // 1. Check local storage first for persistent countdown across page refreshes
+    const storedLockout = localStorage.getItem(ADMIN_LOCKOUT_KEY);
+    if (storedLockout) {
+        const targetTime = parseInt(storedLockout, 10);
+        const now = Date.now();
+        if (targetTime > now) {
+            const remaining = Math.ceil((targetTime - now) / 1000);
+            startLockoutTimer(remaining);
+            return true;
+        } else {
+            localStorage.removeItem(ADMIN_LOCKOUT_KEY);
+        }
+    }
+
+    // 2. Also check backend lockout status
+    try {
+        const res = await fetch(`${API_BASE}/admin/lockout-status?t=${Date.now()}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.locked && data.remaining_seconds > 0) {
+                startLockoutTimer(data.remaining_seconds);
+                return true;
+            }
+        }
+    } catch (err) {
+        console.warn('Could not verify remote lockout status:', err);
+    }
+
+    return false;
+}
+
+window.toggleAdminPasswordVisibility = function() {
+    const input = document.getElementById('admin-password');
+    const icon = document.getElementById('admin-password-toggle-icon');
+    if (!input || !icon) return;
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+};
+
+window.handleAdminLogin = async function(e) {
+    if (e) e.preventDefault();
+
+    const usernameInput = document.getElementById('admin-username');
+    const passwordInput = document.getElementById('admin-password');
+    const submitBtn = document.getElementById('btn-admin-login');
+    const errorBox = document.getElementById('admin-login-error');
+
+    const username = (usernameInput?.value || '').trim();
+    const password = passwordInput?.value || '';
+
+    if (!username || !password) {
+        if (errorBox) {
+            errorBox.className = 'p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold flex items-center gap-2';
+            errorBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-red-400"></i> Please enter both User ID and Password.';
+        }
+        return;
+    }
+
+    const origBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
+    }
+    if (errorBox) errorBox.className = 'hidden';
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            // Successfully authenticated
+            sessionStorage.setItem(ADMIN_TOKEN_KEY, data.token || 'authenticated');
+            localStorage.removeItem(ADMIN_LOCKOUT_KEY);
+            if (errorBox) errorBox.className = 'hidden';
+            
+            showAdminDashboard();
+        } else if (res.status === 429 || data.locked) {
+            // 3rd failed attempt -> 5-minute lockout triggered
+            const remaining = data.remaining_seconds || 300;
+            startLockoutTimer(remaining);
+        } else {
+            // 1st or 2nd failed attempt -> show warning
+            if (errorBox) {
+                const isFinalWarning = data.remaining_attempts === 1;
+                errorBox.className = isFinalWarning
+                    ? 'p-3 bg-amber-950/90 border border-amber-500 rounded-xl text-amber-200 text-xs font-bold flex items-start gap-2.5 animate-pulse'
+                    : 'p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold flex items-start gap-2.5';
+                
+                const icon = isFinalWarning ? 'fa-triangle-exclamation text-amber-400 text-base' : 'fa-circle-xmark text-red-400 text-base';
+                errorBox.innerHTML = `<i class="fa-solid ${icon} mt-0.5 shrink-0"></i> <span>${safeEscapeText(data.error || 'Invalid User ID or Password')}</span>`;
+            }
+            if (passwordInput) {
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+        }
+    } catch (err) {
+        if (errorBox) {
+            errorBox.className = 'p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold flex items-center gap-2';
+            errorBox.innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400"></i> Network error: ${safeEscapeText(err.message)}`;
+        }
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnHtml;
+        }
+    }
+};
+
+function showAdminDashboard() {
+    const loginView = document.getElementById('admin-login-view');
+    const dashboardApp = document.getElementById('admin-dashboard-app');
+
+    if (loginView) loginView.style.display = 'none';
+    if (dashboardApp) dashboardApp.style.display = 'flex';
+
+    startAdminApp();
+}
+
+function showAdminLoginView() {
+    const loginView = document.getElementById('admin-login-view');
+    const dashboardApp = document.getElementById('admin-dashboard-app');
+
+    if (dashboardApp) dashboardApp.style.display = 'none';
+    if (loginView) loginView.style.display = 'flex';
+
+    if (adminPollInterval) {
+        clearInterval(adminPollInterval);
+        adminPollInterval = null;
+    }
+
+    checkLockoutStatus();
+}
+
+window.adminLogout = async function() {
+    const token = sessionStorage.getItem(ADMIN_TOKEN_KEY);
+    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+
+    if (token) {
+        try {
+            await fetch(`${API_BASE}/admin/logout`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ token })
+            });
+        } catch (e) {
+            console.warn('Logout notification error:', e);
+        }
+    }
+
+    showAdminLoginView();
+};
+
+async function initAdminAuth() {
+    const isLocked = await checkLockoutStatus();
+    if (isLocked) {
+        showAdminLoginView();
+        return;
+    }
+
+    const token = sessionStorage.getItem(ADMIN_TOKEN_KEY);
+    if (!token) {
+        showAdminLoginView();
+        return;
+    }
+
+    // Verify token validity with backend
+    try {
+        const res = await fetch(`${API_BASE}/admin/check-session`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.valid) {
+                showAdminDashboard();
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn('Session check network error:', err);
+    }
+
+    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    showAdminLoginView();
+}
+
+function startAdminApp() {
     loadApplication();
     loadPricing();
     if (typeof initPricingForm === 'function') initPricingForm();
     if (typeof refreshEmailCentre === 'function') refreshEmailCentre();
     if (typeof loadEligibleInstitutes === 'function') loadEligibleInstitutes();
+
+    if (adminPollInterval) clearInterval(adminPollInterval);
+    adminPollInterval = setInterval(loadApplication, 3000);
 }
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initAdmin);
+    document.addEventListener('DOMContentLoaded', initAdminAuth);
 } else {
-    initAdmin();
+    initAdminAuth();
 }
-
-// Auto-poll for live real-time updates across multiple devices
-setInterval(loadApplication, 3000);
 
 window.rejectRegistration = async function(email) {
     if (!(await confirmAction('Are you sure you want to REJECT this registration? They will receive a rejection email.'))) return;
